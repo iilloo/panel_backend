@@ -1,0 +1,14 @@
+system:
+  ip: ""
+  port: 8888
+  env: dev
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  dbname: panel_db
+  username: root
+  password: abcd1234
+  logLevel: silent
+jwt:
+  secret: "6ec0358d-436c-4999-b001-837f03f85520"
+
