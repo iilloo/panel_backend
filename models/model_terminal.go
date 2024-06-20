@@ -2,6 +2,7 @@ package models
 
 import (
 	"io"
+	"os"
 	"os/exec"
 )
 
@@ -12,4 +13,5 @@ type Bash struct {
 	StderrPipe io.ReadCloser
 	UUID string
 	Order string
+	Ptmx *os.File
 }

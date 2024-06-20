@@ -1,6 +1,7 @@
 package global
 
 import (
+	"os/exec"
 	_ "os/exec"
 	"panel_backend/config"
 	"panel_backend/models"
@@ -17,5 +18,6 @@ var (
 	Secret string
 	UserCount int
 	Bash *models.Bash
+	CMD *exec.Cmd
 )
 	

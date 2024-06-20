@@ -196,7 +196,7 @@ func WS(c *gin.Context) {
 		case "cmdStdin":
 			//执行命令
 			global.Log.Infof("收到命令: %s\n", message.Data)
-			HandleOrder(message.Data.(string), conn)
+			HandleOrder_1(message.Data.(string), conn)
 		}
 		
 
