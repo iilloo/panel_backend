@@ -60,6 +60,13 @@ func messageString(msgType string, data interface{}) []byte {
 	responseByte, _ := json.Marshal(response)
 	return responseByte
 }
+func MessageString(msgType string, data interface{}) []byte {
+	var response models.Message
+	response.Type = msgType
+	response.Data = data
+	responseByte, _ := json.Marshal(response)
+	return responseByte
+}
 func WS(c *gin.Context) {
 	//websocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -196,6 +203,7 @@ func WS(c *gin.Context) {
 		case "cmdStdin":
 			//执行命令
 			global.Log.Infof("收到命令: %s\n", message.Data)
+			
 			HandleOrder_1(message.Data.(string), conn)
 		}
 		

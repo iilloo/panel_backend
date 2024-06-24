@@ -78,72 +78,72 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 	// 		return
 	// 	}
 	// }
-	ptmx, err := pty.Start(global.Bash.CMD)
-	global.Bash.Ptmx = ptmx
-	if err != nil {
-		global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
-		return
+	if global.Bash.CMD.Process == nil {
+		fmt.Println("bash进程未启动")
+		ptmx, err := pty.Start(global.Bash.CMD)
+		global.Bash.Ptmx = ptmx
+		if err != nil {
+			global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
+			return
+		}
+		//继续检测可能的输出
+		go func() {
+			buf := make([]byte, 1024)
+			for {
+				n, err := global.Bash.Ptmx.Read(buf)
+				if err != nil {
+					global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
+					return
+				}
+				// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
+				response := messageString("cmdStdout", string(buf[:n]))
+				conn.WriteMessage(websocket.TextMessage, response)
+			}
+		}()
 	}
-	global.Log.Infof("order: %s\n", order)
-	global.Bash.Order = order
-	// 生成一个唯一的ID
-	global.Bash.UUID = uuid.New().String()
-	fullOrder := order + "; echo END_OF_COMMAND_" + global.Bash.UUID + "\n"
-	_, err = global.Bash.Ptmx.Write([]byte(fullOrder))
+
+	global.Log.Infof("order: %s", order)
+	_, err := global.Bash.Ptmx.Write([]byte(order))
 	if err != nil {
 		global.Log.Errorf("写入伪终端pty失败: %s", err.Error())
 		return
 	}
 	//继续检测可能的输入
-	go func() {
-		var message models.Message
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				global.Log.Errorf("处理交互性命令读取MESSAGE失败: %s", err.Error())
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					global.Log.Errorf("websocket连接异常关闭\n")
-					return
-				} else if websocket.IsCloseError(err, websocket.CloseGoingAway) {
-					global.Log.Errorf("websocket连接被前端正常关闭\n")
-					return
-				}
-				//给前端回复错误信息
-				// conn.WriteMessage(messageType, []byte("读取信息失败"))
-				response := messageString("interactionError", "读取信息失败")
-				conn.WriteMessage(websocket.TextMessage, response)
-				return
-			}
-			if err := json.Unmarshal(msg, &message); err != nil {
-				global.Log.Errorf("处理交互性命令websocket解析信息失败:[%s]\n", err.Error())
-				//给前端回复错误信息
-				response := messageString("interactionError", "解析信息失败")
-				conn.WriteMessage(websocket.TextMessage, response)
-				return
-			}
-			if message.Type == "cmdStdin" {
-				_, err := global.Bash.Ptmx.Write([]byte(message.Data.(string)))
-				if err != nil {
-					global.Log.Errorf("交互性命令写入伪终端pty失败: %s", err.Error())
-					return
-				}
-			}
+	// go func() {
+	// 	var message models.Message
+	// 	for {
+	// 		_, msg, err := conn.ReadMessage()
+	// 		if err != nil {
+	// 			global.Log.Errorf("处理交互性命令读取MESSAGE失败: %s", err.Error())
+	// 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+	// 				global.Log.Errorf("websocket连接异常关闭\n")
+	// 				return
+	// 			} else if websocket.IsCloseError(err, websocket.CloseGoingAway) {
+	// 				global.Log.Errorf("websocket连接被前端正常关闭\n")
+	// 				return
+	// 			}
+	// 			//给前端回复错误信息
+	// 			// conn.WriteMessage(messageType, []byte("读取信息失败"))
+	// 			response := messageString("interactionError", "读取信息失败")
+	// 			conn.WriteMessage(websocket.TextMessage, response)
+	// 			return
+	// 		}
+	// 		if err := json.Unmarshal(msg, &message); err != nil {
+	// 			global.Log.Errorf("处理交互性命令websocket解析信息失败:[%s]\n", err.Error())
+	// 			//给前端回复错误信息
+	// 			response := messageString("interactionError", "解析信息失败")
+	// 			conn.WriteMessage(websocket.TextMessage, response)
+	// 			return
+	// 		}
+	// 		if message.Type == "cmdStdin" {
+	// 			_, err := global.Bash.Ptmx.Write([]byte(message.Data.(string)))
+	// 			if err != nil {
+	// 				global.Log.Errorf("交互性命令写入伪终端pty失败: %s", err.Error())
+	// 				return
+	// 			}
+	// 		}
 
-		}
-	}()
-	//继续检测可能的输出
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, err := global.Bash.Ptmx.Read(buf)
-			if err != nil {
-				global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
-				return
-			}
-			fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
-			response := messageString("cmdStdout", string(buf[:n]))
-			conn.WriteMessage(websocket.TextMessage, response)
-		}
-	}()
+	// 	}
+	// }()
 
 }
