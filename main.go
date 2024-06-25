@@ -3,7 +3,6 @@ package main
 import (
 	_ "fmt"
 	_ "net/http"
-	"os/exec"
 	"panel_backend/core"
 	"panel_backend/global"
 	"panel_backend/routers"
@@ -35,7 +34,7 @@ func main() {
 		global.Log.Errorf("bash初始化失败")
 		return
 	}
-	global.CMD = exec.Command("bash")
+	// global.CMD = exec.Command("bash")
 
 
 	// 初始化路由

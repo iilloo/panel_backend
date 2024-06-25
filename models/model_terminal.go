@@ -14,4 +14,10 @@ type Bash struct {
 	UUID string
 	Order string
 	Ptmx *os.File
+	StopInPutChan chan bool
+}
+type PtyInfo struct {
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
+
 }

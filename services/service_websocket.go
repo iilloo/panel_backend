@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"panel_backend/global"
 	"panel_backend/utils/jwts"
 	"sync"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
@@ -18,7 +20,7 @@ import (
 // 升级http协议为websocket协议
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
+	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		//允许所有的跨域请求
 		return true
@@ -116,6 +118,7 @@ func WS(c *gin.Context) {
 		} else {
 			//给前端回复成功信息
 			response := messageString("success", "websocket身份认证成功")
+			global.Log.Infof("websocket身份认证成功\n")
 			conn.WriteMessage(messageType, response)
 			//如果有新的token则返回给前端
 			if newTokenString != "" {
@@ -137,9 +140,47 @@ func WS(c *gin.Context) {
 			global.Log.Errorf("websocket读取信息失败:[%s]\n", err.Error())
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				global.Log.Errorf("websocket连接异常关闭\n")
+				//发送pty持续输出的协程的关闭信号
+				global.Bash.StopInPutChan <- true
+				//关闭pty伪终端
+				global.Bash.Ptmx.Close()
+				global.Log.Infof("Ptmx伪终端关闭\n")
+				//重新启动bash进程
+				global.Bash.CMD = exec.Command("bash")
+				global.Log.Infof("重新启动bash进程\n")
+				// //关闭bash进程
+				// if err := global.Bash.CMD.Process.Signal(syscall.SIGTERM); err != nil {
+				// 	global.Log.Errorf("无法发送 SIGTERM 信号: %v\n", err)
+				// 	err := global.Bash.CMD.Process.Signal(syscall.SIGKILL)
+				// 	if err != nil {
+				// 		global.Log.Errorf("无法发送 SIGKILL 信号: %v\n", err)
+				// 	}
+
+				// }
+				// global.Bash.CMD.Wait()
+				// global.Log.Infof("bash进程关闭\n")
+
 				return
 			} else if websocket.IsCloseError(err, websocket.CloseGoingAway) {
 				global.Log.Errorf("websocket连接被前端正常关闭\n")
+				//关闭pty伪终端
+				global.Bash.Ptmx.Close()
+				global.Log.Infof("Ptmx伪终端关闭\n")
+				//重新启动bash进程
+				global.Bash.CMD = exec.Command("bash")
+				global.Log.Infof("重新启动bash进程\n")
+				// //关闭bash进程
+				// if err := global.Bash.CMD.Process.Signal(syscall.SIGKILL); err != nil {
+				// 	global.Log.Errorf("无法发送 SIGTERM 信号: %v\n", err)
+				// 	err := global.Bash.CMD.Process.Signal(syscall.SIGKILL)
+				// 	if err != nil {
+				// 		global.Log.Errorf("无法发送 SIGKILL 信号: %v\n", err)
+				// 	}
+				// }
+				// global.Log.Infof("aaaaaaaaaaaaaaaaaaa\n")
+				// global.Bash.CMD.Wait()
+				// global.Log.Infof("bbbbbbbbbbbbbbbbbbb\n")
+				// global.Log.Infof("bash进程关闭\n")
 				return
 			}
 			//给前端回复错误信息
@@ -173,7 +214,7 @@ func WS(c *gin.Context) {
 				}
 				if infoName == "网络" {
 					hostStatus.NetStatus = *(info.(*models.NetStatus))
-				} else if infoName == "cpu"{
+				} else if infoName == "cpu" {
 					hostStatus.HostBasicInfos.CpuInfo = *(info.(*models.HostItemStatu))
 				} else if infoName == "内存" {
 					hostStatus.HostBasicInfos.MemInfo = *(info.(*models.HostItemStatu))
@@ -202,11 +243,15 @@ func WS(c *gin.Context) {
 			conn.WriteMessage(messageType, response)
 		case "cmdStdin":
 			//执行命令
-			global.Log.Infof("收到命令: %s\n", message.Data)
-			
 			HandleOrder_1(message.Data.(string), conn)
+		case "ptyInfo":
+			//设置pty的大小
+			ptyInfo := message.Data.(models.PtyInfo)
+			pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
+                Cols: ptyInfo.Cols,
+                Rows: ptyInfo.Rows,
+            })
+			global.Log.Infof("Cols:%d Rows:%d\n,pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
 		}
-		
-
 	}
 }

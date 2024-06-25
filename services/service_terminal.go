@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+
 	"panel_backend/global"
 	"panel_backend/models"
+
 
 	"github.com/creack/pty"
 	"github.com/google/uuid"
@@ -70,14 +72,7 @@ func HandleOrder(order string, conn *websocket.Conn) {
 
 func HandleOrder_1(order string, conn *websocket.Conn) {
 	//如果没有启动bash进程，启动bash进程
-	// if global.Bash.CMD.Process == nil {
-	// 	var err error
-	// 	global.Bash.Ptmx, err = pty.Start(global.Bash.CMD)
-	// 	if err != nil {
-	// 		global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
-	// 		return
-	// 	}
-	// }
+	//适用于第一次启动bash进程
 	if global.Bash.CMD.Process == nil {
 		fmt.Println("bash进程未启动")
 		ptmx, err := pty.Start(global.Bash.CMD)
@@ -98,52 +93,55 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 				// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
 				response := messageString("cmdStdout", string(buf[:n]))
 				conn.WriteMessage(websocket.TextMessage, response)
+				// select {
+				// case <-global.Bash.StopInPutChan:
+				// 	global.Log.Infof("关闭持续输出协程\n")
+				// 	return
+				// default:
+				// 	n, err := global.Bash.Ptmx.Read(buf)
+				// 	if err != nil {
+				// 		global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
+				// 		return
+				// 	}
+				// 	// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
+				// 	response := messageString("cmdStdout", string(buf[:n]))
+				// 	conn.WriteMessage(websocket.TextMessage, response)
+				// }
 			}
 		}()
 	}
+	//用于判断bash进程关闭过后是否重新启动bash进程
+	// global.Log.Infof("global.Bash.CMD.Process != nil\n")
+	// if global.Bash.CMD.Process != nil && global.Bash.CMD.Process.Signal(syscall.Signal(0)) != nil {
+	// 	global.Log.Infof("bash进程已经关闭，重新启动bash进程\n")
+	// 	global.Bash.CMD = exec.Command("bash")
+	// 	ptmx, err := pty.Start(global.Bash.CMD)
+	// 	global.Bash.Ptmx = ptmx
+	// 	if err != nil {
+	// 		global.Log.Errorf("重新启动bash进程以及伪终端pty失败: %s", err.Error())
+	// 		return
+	// 	}
+	// 	//继续检测可能的输出
+	// 	go func() {
+	// 		buf := make([]byte, 1024)
+	// 		for {
+	// 			n, err := global.Bash.Ptmx.Read(buf)
+	// 				if err != nil {
+	// 					global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
+	// 					return
+	// 				}
+	// 				// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
+	// 				response := messageString("cmdStdout", string(buf[:n]))
+	// 				conn.WriteMessage(websocket.TextMessage, response)
+	// 		}
+	// 	}()
+	// }
 
-	global.Log.Infof("order: %s", order)
+	global.Log.Infof("order: %s\n", order)
 	_, err := global.Bash.Ptmx.Write([]byte(order))
 	if err != nil {
 		global.Log.Errorf("写入伪终端pty失败: %s", err.Error())
 		return
 	}
-	//继续检测可能的输入
-	// go func() {
-	// 	var message models.Message
-	// 	for {
-	// 		_, msg, err := conn.ReadMessage()
-	// 		if err != nil {
-	// 			global.Log.Errorf("处理交互性命令读取MESSAGE失败: %s", err.Error())
-	// 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-	// 				global.Log.Errorf("websocket连接异常关闭\n")
-	// 				return
-	// 			} else if websocket.IsCloseError(err, websocket.CloseGoingAway) {
-	// 				global.Log.Errorf("websocket连接被前端正常关闭\n")
-	// 				return
-	// 			}
-	// 			//给前端回复错误信息
-	// 			// conn.WriteMessage(messageType, []byte("读取信息失败"))
-	// 			response := messageString("interactionError", "读取信息失败")
-	// 			conn.WriteMessage(websocket.TextMessage, response)
-	// 			return
-	// 		}
-	// 		if err := json.Unmarshal(msg, &message); err != nil {
-	// 			global.Log.Errorf("处理交互性命令websocket解析信息失败:[%s]\n", err.Error())
-	// 			//给前端回复错误信息
-	// 			response := messageString("interactionError", "解析信息失败")
-	// 			conn.WriteMessage(websocket.TextMessage, response)
-	// 			return
-	// 		}
-	// 		if message.Type == "cmdStdin" {
-	// 			_, err := global.Bash.Ptmx.Write([]byte(message.Data.(string)))
-	// 			if err != nil {
-	// 				global.Log.Errorf("交互性命令写入伪终端pty失败: %s", err.Error())
-	// 				return
-	// 			}
-	// 		}
-
-	// 	}
-	// }()
 
 }

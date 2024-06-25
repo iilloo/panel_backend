@@ -23,6 +23,7 @@ func InitCMD() *models.Bash {
 	// 	global.Log.Errorf("获取bash进程错误输出管道失败: %s", err.Error())
 	// 	return nil
 	// }
+	stopChan := make(chan bool, 1)
 	global.Log.Infof("bash进程初始化成功\n")
 	return &models.Bash{
 		CMD:        cmd,
@@ -32,5 +33,6 @@ func InitCMD() *models.Bash {
 		UUID:       "",
 		Order:      "",
 		Ptmx:       nil,
+		StopInPutChan: stopChan,
 	}
 }
