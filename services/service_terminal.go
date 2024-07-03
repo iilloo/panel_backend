@@ -8,7 +8,6 @@ import (
 	"panel_backend/global"
 	"panel_backend/models"
 
-
 	"github.com/creack/pty"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -138,6 +137,10 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 	// }
 
 	global.Log.Infof("order: %s\n", order)
+	pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
+		Cols: 160,
+		Rows: 100,
+	})
 	_, err := global.Bash.Ptmx.Write([]byte(order))
 	if err != nil {
 		global.Log.Errorf("写入伪终端pty失败: %s", err.Error())

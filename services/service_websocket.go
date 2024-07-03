@@ -250,14 +250,14 @@ func WS(c *gin.Context) {
 			cols := message.Data.(map[string]interface{})["cols"].(float64)
 			rows := message.Data.(map[string]interface{})["rows"].(float64)
 			global.Log.Infof("Cols:%v %T Rows:%v %T\n", cols, cols, rows, rows)
-			var ptyInfo models.PtyInfo = models.PtyInfo {
+			var ptyInfo models.PtyInfo = models.PtyInfo{
 				Cols: uint16(cols),
 				Rows: uint16(rows),
 			}
 			pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
-                Cols: ptyInfo.Cols,
-                Rows: ptyInfo.Rows,
-            })
+				Cols: ptyInfo.Cols,
+				Rows: ptyInfo.Rows,
+			})
 			global.Log.Infof("Cols:%d Rows:%d,pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
 		}
 	}
