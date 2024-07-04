@@ -140,10 +140,10 @@ func WS(c *gin.Context) {
 			global.Log.Errorf("websocket读取信息失败:[%s]\n", err.Error())
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				global.Log.Errorf("websocket连接异常关闭\n")
-				//发送pty持续输出的协程的关闭信号
-				global.Bash.StopInPutChan <- true
+
 				//关闭pty伪终端
 				global.Bash.Ptmx.Close()
+				global.Bash.Ptmx = nil
 				global.Log.Infof("Ptmx伪终端关闭\n")
 				//重新启动bash进程
 				global.Bash.CMD = exec.Command("bash")
@@ -165,6 +165,7 @@ func WS(c *gin.Context) {
 				global.Log.Errorf("websocket连接被前端正常关闭\n")
 				//关闭pty伪终端
 				global.Bash.Ptmx.Close()
+				global.Bash.Ptmx = nil
 				global.Log.Infof("Ptmx伪终端关闭\n")
 				//重新启动bash进程
 				global.Bash.CMD = exec.Command("bash")
@@ -254,11 +255,62 @@ func WS(c *gin.Context) {
 				Cols: uint16(cols),
 				Rows: uint16(rows),
 			}
+			global.Bash.Cols = ptyInfo.Cols
+			global.Bash.Rows = ptyInfo.Rows
+			if global.Bash.CMD.Process == nil {
+				fmt.Println("bash进程未启动")
+				ptmx, err := pty.Start(global.Bash.CMD)
+				global.Bash.Ptmx = ptmx
+				if err != nil {
+					global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
+					return
+				}
+
+				//继续检测可能的输出
+				go func() {
+					buf := make([]byte, 1024)
+					for {
+						n, err := global.Bash.Ptmx.Read(buf)
+						if err != nil {
+							global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
+							return
+						}
+						// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
+						response := messageString("cmdStdout", string(buf[:n]))
+						conn.WriteMessage(websocket.TextMessage, response)
+						// select {
+						// case <-global.Bash.StopInPutChan:
+						// 	global.Log.Infof("关闭持续输出协程\n")
+						// 	return
+						// default:
+						// 	n, err := global.Bash.Ptmx.Read(buf)
+						// 	if err != nil {
+						// 		global.Log.Errorf("处理交互性命令读取伪终端pty输出失败: %s", err.Error())
+						// 		return
+						// 	}
+						// 	// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
+						// 	response := messageString("cmdStdout", string(buf[:n]))
+						// 	conn.WriteMessage(websocket.TextMessage, response)
+						// }
+					}
+				}()
+			}
 			pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
 				Cols: ptyInfo.Cols,
 				Rows: ptyInfo.Rows,
 			})
-			global.Log.Infof("Cols:%d Rows:%d,pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
+			global.Log.Infof("Cols:%d Rows:%d,全局pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
+
+
+			// go func() {
+			// 	if <-global.Bash.StopInPutChan {
+			// 		pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
+			// 			Cols: ptyInfo.Cols,
+			// 			Rows: ptyInfo.Rows,
+			// 		})
+			// 	}
+			// 	global.Log.Infof("Cols:%d Rows:%d,全局pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
+			// } ()
 		}
 	}
 }

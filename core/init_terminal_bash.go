@@ -34,5 +34,9 @@ func InitCMD() *models.Bash {
 		Order:      "",
 		Ptmx:       nil,
 		StopInPutChan: stopChan,
+		Cols:       160,
+		Rows:       42,
+		ColsPre:    160,
+		RowsPre:    42,
 	}
 }

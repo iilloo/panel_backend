@@ -80,6 +80,7 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 			global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
 			return
 		}
+		
 		//继续检测可能的输出
 		go func() {
 			buf := make([]byte, 1024)
@@ -135,12 +136,16 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 	// 		}
 	// 	}()
 	// }
-
+	// if global.Bash.Cols != global.Bash.ColsPre && global.Bash.Rows != global.Bash.RowsPre {
+	// 	pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
+	// 		Cols: global.Bash.Cols,
+	// 		Rows: global.Bash.Rows,
+	// 	})
+	// 	global.Bash.ColsPre = global.Bash.Cols
+	// 	global.Bash.RowsPre = global.Bash.Rows
+	// 	global.Log.Infof("pty设置大小成功Cols:%d,Rows:%d\n", global.Bash.Cols, global.Bash.Rows)
+	// }
 	global.Log.Infof("order: %s\n", order)
-	pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
-		Cols: 160,
-		Rows: 100,
-	})
 	_, err := global.Bash.Ptmx.Write([]byte(order))
 	if err != nil {
 		global.Log.Errorf("写入伪终端pty失败: %s", err.Error())
