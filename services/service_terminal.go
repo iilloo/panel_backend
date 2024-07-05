@@ -80,6 +80,10 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 			global.Log.Errorf("启动bash进程以及伪终端pty失败: %s", err.Error())
 			return
 		}
+		pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
+			Cols: global.Bash.Cols,
+			Rows: global.Bash.Rows,
+		})
 		
 		//继续检测可能的输出
 		go func() {

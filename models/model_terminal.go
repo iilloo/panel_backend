@@ -17,8 +17,6 @@ type Bash struct {
 	StopInPutChan chan bool
 	Cols uint16
 	Rows uint16
-	ColsPre uint16
-	RowsPre uint16
 }
 type PtyInfo struct {
 	Cols uint16 `json:"cols"`

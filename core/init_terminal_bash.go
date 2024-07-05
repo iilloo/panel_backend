@@ -36,7 +36,5 @@ func InitCMD() *models.Bash {
 		StopInPutChan: stopChan,
 		Cols:       160,
 		Rows:       42,
-		ColsPre:    160,
-		RowsPre:    42,
 	}
 }

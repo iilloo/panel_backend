@@ -300,17 +300,6 @@ func WS(c *gin.Context) {
 				Rows: ptyInfo.Rows,
 			})
 			global.Log.Infof("Cols:%d Rows:%d,全局pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
-
-
-			// go func() {
-			// 	if <-global.Bash.StopInPutChan {
-			// 		pty.Setsize(global.Bash.Ptmx, &pty.Winsize{
-			// 			Cols: ptyInfo.Cols,
-			// 			Rows: ptyInfo.Rows,
-			// 		})
-			// 	}
-			// 	global.Log.Infof("Cols:%d Rows:%d,全局pty大小设置成功\n", ptyInfo.Cols, ptyInfo.Rows)
-			// } ()
 		}
 	}
 }
