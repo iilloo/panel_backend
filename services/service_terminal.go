@@ -96,6 +96,7 @@ func HandleOrder_1(order string, conn *websocket.Conn) {
 				}
 				// fmt.Printf("cmdStdout: %s\n", string(buf[:n]))
 				response := messageString("cmdStdout", string(buf[:n]))
+				global.Log.Infof("cmdStdout: %s\n", response)
 				conn.WriteMessage(websocket.TextMessage, response)
 				// select {
 				// case <-global.Bash.StopInPutChan:
