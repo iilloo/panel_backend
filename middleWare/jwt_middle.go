@@ -40,6 +40,7 @@ func JWTMiddle() gin.HandlerFunc {
 			//解析并刷新token
 			claims, newTokenString, err := jwts.ParseToken(tokenString)
 			if err != nil {
+				global.Log.Warnf("[%s]token无效,解析失败\n",c.RemoteIP())
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"code": 401,
 					"msg":  "token无效,解析失败",
