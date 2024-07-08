@@ -39,6 +39,9 @@ func Routers() *gin.Engine{
 
 	//主机状态相关路由
 	HostStatusRouter(router)
+	//token检查相关路由
+	CheckToken(router)
+
 
 	return router
 }
