@@ -11,6 +11,6 @@ func CheckToken(c *gin.Context) {
 		"code": 200,
 		"msg":  "token check success",
 	})
-	global.Log.Infof("token check success")
+	global.Log.Infof("token check success\n")
 	c.Next()
 }
