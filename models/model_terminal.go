@@ -1,22 +1,21 @@
 package models
 
 import (
-	"io"
+	_"io"
 	"os"
 	"os/exec"
+	"os/user"
 )
 
 type Bash struct {
 	CMD *exec.Cmd
-	StdinPipe io.WriteCloser
-	StdoutPipe io.ReadCloser
-	StderrPipe io.ReadCloser
-	UUID string
+	Usr *user.User
 	Order string
 	Ptmx *os.File
 	StopInPutChan chan bool
 	Cols uint16
 	Rows uint16
+
 }
 type PtyInfo struct {
 	Cols uint16 `json:"cols"`

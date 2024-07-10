@@ -147,18 +147,8 @@ func WS(c *gin.Context) {
 				global.Log.Infof("Ptmx伪终端关闭\n")
 				//重新启动bash进程
 				global.Bash.CMD = exec.Command("bash")
+				global.Bash.CMD.Dir = global.Bash.Usr.HomeDir
 				global.Log.Infof("重新启动bash进程\n")
-				// //关闭bash进程
-				// if err := global.Bash.CMD.Process.Signal(syscall.SIGTERM); err != nil {
-				// 	global.Log.Errorf("无法发送 SIGTERM 信号: %v\n", err)
-				// 	err := global.Bash.CMD.Process.Signal(syscall.SIGKILL)
-				// 	if err != nil {
-				// 		global.Log.Errorf("无法发送 SIGKILL 信号: %v\n", err)
-				// 	}
-
-				// }
-				// global.Bash.CMD.Wait()
-				// global.Log.Infof("bash进程关闭\n")
 
 				return
 			} else if websocket.IsCloseError(err, websocket.CloseGoingAway) {
@@ -169,19 +159,8 @@ func WS(c *gin.Context) {
 				global.Log.Infof("Ptmx伪终端关闭\n")
 				//重新启动bash进程
 				global.Bash.CMD = exec.Command("bash")
+				global.Bash.CMD.Dir = global.Bash.Usr.HomeDir
 				global.Log.Infof("重新启动bash进程\n")
-				// //关闭bash进程
-				// if err := global.Bash.CMD.Process.Signal(syscall.SIGKILL); err != nil {
-				// 	global.Log.Errorf("无法发送 SIGTERM 信号: %v\n", err)
-				// 	err := global.Bash.CMD.Process.Signal(syscall.SIGKILL)
-				// 	if err != nil {
-				// 		global.Log.Errorf("无法发送 SIGKILL 信号: %v\n", err)
-				// 	}
-				// }
-				// global.Log.Infof("aaaaaaaaaaaaaaaaaaa\n")
-				// global.Bash.CMD.Wait()
-				// global.Log.Infof("bbbbbbbbbbbbbbbbbbb\n")
-				// global.Log.Infof("bash进程关闭\n")
 				return
 			}
 			//给前端回复错误信息
@@ -244,7 +223,7 @@ func WS(c *gin.Context) {
 			conn.WriteMessage(messageType, response)
 		case "cmdStdin":
 			//执行命令
-			HandleOrder_1(message.Data.(string), conn)
+			HandleOrder(message.Data.(string), conn)
 		case "ptyInfo":
 			//设置pty的大小
 			fmt.Printf("ptyInfo:%v %T\n", message.Data, message.Data)
