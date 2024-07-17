@@ -5,6 +5,7 @@ import (
 	"os"
 	"panel_backend/global"
 	"strings"
+	"time"
 
 	"panel_backend/models"
 
@@ -158,36 +159,63 @@ func RenameFile(c *gin.Context) {
 func ReadFile(c *gin.Context) {
 	// 读取文件内容
 	path := c.Query("path")
-	file, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
-	if err != nil {
-		global.Log.Errorf("[%s]打开文件失败:[%s]\n", path, err.Error())
+	global.Log.Debugf("读取[%s]文件\n", path)
+	done := make(chan bool, 1)
+	cancel := make(chan bool, 1)
+	go func() {
+		file, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
+		if err != nil {
+			global.Log.Errorf("[%s]打开文件失败:[%s]\n", path, err.Error())
+			c.JSON(500, gin.H{
+				"msg": "系统错误，打开文件失败",
+			})
+			return
+		}
+		defer file.Close()
+
+		reader := bufio.NewReader(file)
+		content := ""
+		buf := make([]byte, 1024)
+		lable1:
+		for {
+			select {
+			case <-cancel:
+				global.Log.Errorf("读取[%s]文件取消\n", path)
+				return
+			default:
+				n, err := reader.Read(buf)
+				if err != nil {
+					break lable1
+				}
+				content += string(buf[:n])
+			}
+		}
+		global.Log.Debugf("读取[%s]文件成功\n", path)
+		c.JSON(200, gin.H{
+			"text": content,
+		})
+		done <- true
+	}()
+	select {
+	case <-done:
+		return
+	case <-time.After(3 * time.Second):
+		global.Log.Errorf("读取[%s]文件超时\n", path)
+		// 通知协程取消
+		cancel <- true
 		c.JSON(500, gin.H{
-			"msg": "系统错误，打开文件失败",
+			"msg": "系统错误或文件过大，读取文件超时",
 		})
 		return
 	}
-	defer file.Close()
-
-	reader := bufio.NewReader(file)
-	content := ""
-	buf := make([]byte, 1024)
-	for {
-		n, err := reader.Read(buf)
-		if err != nil {
-			break
-		}
-		content += string(buf[:n])
-	}
-	global.Log.Debugf("读取[%s]文件成功\n", path)
-	c.JSON(200, gin.H{
-		"text": content,
-	})
 }
+
 type WriteFileText struct {
 	Path string `json:"path"`
 	Text string `json:"text"`
 	Name string `json:"name"`
 }
+
 func WriteFile(c *gin.Context) {
 	// 写入文件内容
 	var writeFileText WriteFileText
@@ -196,7 +224,7 @@ func WriteFile(c *gin.Context) {
 	path = strings.TrimRight(path, "/") + "/" + writeFileText.Name
 
 	text := writeFileText.Text
-	file, err := os.OpenFile(path, os.O_WRONLY | os.O_TRUNC, os.ModePerm)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, os.ModePerm)
 	if err != nil {
 		global.Log.Errorf("[%s]打开文件失败:[%s]\n", path, err.Error())
 		c.JSON(500, gin.H{
