@@ -19,6 +19,7 @@ func SearchFile(c *gin.Context) {
 	if err != nil {
 		global.Log.Errorf("[%s]路径不合法:[%s]\n", path, err.Error())
 		c.JSON(400, gin.H{
+			"code": 400,
 			"msg": "路径不存在，请重新输入",
 		})
 		return
@@ -29,6 +30,7 @@ func SearchFile(c *gin.Context) {
 		if err != nil {
 			global.Log.Errorf("[%s]读取目录信息失败:[%s]\n", entry.Name(), err.Error())
 			c.JSON(400, gin.H{
+				"code": 400,
 				"msg": "读取文件信息失败",
 			})
 			return
@@ -46,6 +48,7 @@ func SearchFile(c *gin.Context) {
 	// fmt.Printf("files: %v\n", files)
 	global.Log.Debugf("返回[%s]信息成功\n", path)
 	c.JSON(200, gin.H{
+		"code": 200,
 		"files": files,
 	})
 }
@@ -63,12 +66,14 @@ func AddFile(c *gin.Context) {
 		if err != nil {
 			global.Log.Errorf("[%s]创建目录失败:[%s]\n", path+"/"+name, err.Error())
 			c.JSON(500, gin.H{
+				"code": 500,
 				"msg": "系统错误，创建目录失败",
 			})
 			return
 		}
 		global.Log.Debugf("创建[%s]目录成功\n", path+"/"+name)
 		c.JSON(200, gin.H{
+			"code": 200,
 			"msg": "创建成功",
 		})
 		return
@@ -84,6 +89,7 @@ func AddFile(c *gin.Context) {
 		}
 		global.Log.Debugf("创建[%s]文件成功\n", path+"/"+name)
 		c.JSON(200, gin.H{
+			"code": 200,
 			"msg": "创建成功",
 		})
 		return
@@ -96,6 +102,7 @@ func DeleteFile(c *gin.Context) {
 	if c.GetHeader("Override") != "DELETE" {
 		global.Log.Errorf("删除文件请求不合法,Override请求头缺失或有误\n")
 		c.JSON(400, gin.H{
+			"code": 400,
 			"msg": "请求不合法",
 		})
 		return
@@ -112,6 +119,7 @@ func DeleteFile(c *gin.Context) {
 			if err != nil {
 				global.Log.Errorf("[%s]删除失败:[%s]\n", currentPath, err.Error())
 				c.JSON(500, gin.H{
+					"code": 500,
 					"msg": "系统错误，删除失败",
 				})
 				return
@@ -122,6 +130,7 @@ func DeleteFile(c *gin.Context) {
 			if err != nil {
 				global.Log.Errorf("[%s]删除失败:[%s]\n", currentPath, err.Error())
 				c.JSON(500, gin.H{
+					"code": 500,
 					"msg": "系统错误，删除失败",
 				})
 				return
@@ -130,6 +139,7 @@ func DeleteFile(c *gin.Context) {
 		}
 	}
 	c.JSON(200, gin.H{
+		"code": 200,
 		"msg": "删除成功",
 	})
 }
@@ -147,12 +157,14 @@ func RenameFile(c *gin.Context) {
 	if err != nil {
 		global.Log.Errorf("[%s]重命名失败:[%s]\n", path+"/"+name, err.Error())
 		c.JSON(500, gin.H{
+			"code": 500,
 			"msg": "系统错误，重命名失败",
 		})
 		return
 	}
 	global.Log.Debugf("重命名[%s]成功\n", path+"/"+name)
 	c.JSON(200, gin.H{
+		"code": 200,
 		"msg": "重命名成功",
 	})
 }
