@@ -269,3 +269,63 @@ func WriteFile(c *gin.Context) {
 	})
 
 }
+type PasteRequest struct {
+	OldPath string `json:"oldPath"`
+	NewPath string `json:"newPath"`
+	Names   []string `json:"names"`
+}
+func CutPasteFile(c *gin.Context) {
+	// 粘贴文件
+	var pasteRequest PasteRequest
+	c.BindJSON(&pasteRequest)
+	oldPath := pasteRequest.OldPath
+	newPath := pasteRequest.NewPath
+	names := pasteRequest.Names
+	global.Log.Infof("oldPath: %s, newPath: %s\n, names: %v\n", oldPath, newPath, names)
+	oldPath = strings.TrimRight(oldPath, "/")
+	newPath = strings.TrimRight(newPath, "/")
+	for _, name := range names {
+		err := os.Rename(oldPath+"/"+name, newPath+"/"+name)
+		if err != nil {
+			global.Log.Errorf("[%s]移动失败:[%s]\n", oldPath+"/"+name, err.Error())
+			c.JSON(500, gin.H{
+				"code": 500,
+				"msg": "系统错误，移动失败",
+			})
+			return
+		}
+		global.Log.Debugf("移动[%s]成功\n", oldPath+"/"+name)
+	}
+	c.JSON(200, gin.H{
+		"code": 200,
+		"msg": "移动成功",
+	})
+}
+
+func CopyPasteFile(c *gin.Context) {
+	// 粘贴文件
+	var pasteRequest PasteRequest
+	c.BindJSON(&pasteRequest)
+	oldPath := pasteRequest.OldPath
+	newPath := pasteRequest.NewPath
+	names := pasteRequest.Names
+	global.Log.Infof("oldPath: %s, newPath: %s\n, names: %v\n", oldPath, newPath, names)
+	oldPath = strings.TrimRight(oldPath, "/")
+	newPath = strings.TrimRight(newPath, "/")
+	for _, name := range names {
+		err := os.Rename(oldPath+"/"+name, newPath+"/"+name)
+		if err != nil {
+			global.Log.Errorf("[%s]移动失败:[%s]\n", oldPath+"/"+name, err.Error())
+			c.JSON(500, gin.H{
+				"code": 500,
+				"msg": "系统错误，移动失败",
+			})
+			return
+		}
+		global.Log.Debugf("移动[%s]成功\n", oldPath+"/"+name)
+	}
+	c.JSON(200, gin.H{
+		"code": 200,
+		"msg": "移动成功",
+	})
+}

@@ -47,3 +47,10 @@ func WriteFile() gin.HandlerFunc{
 		services.WriteFile(c)
 	}
 }
+
+func CutPasteFile() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//粘贴文件
+		services.CutPasteFile(c)
+	}
+}
