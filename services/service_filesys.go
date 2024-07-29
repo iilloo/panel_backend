@@ -2,6 +2,7 @@ package services
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -309,55 +310,57 @@ func CutPasteFile(c *gin.Context) {
 		"msg":  "移动成功",
 	})
 }
+
 // FolderSize 计算文件夹大小
-// func FolderSize(path string) int64 {
-// 	var size int64 = 0
-// 	entries, err := os.ReadDir(path)
-// 	if err != nil {
-// 		global.Log.Errorf("[%s]路径不合法:[%s]\n", path, err.Error())
-// 		return -1
-// 	}
-// 	for _, entry := range entries {
-// 		fileInfo, err := entry.Info()
-// 		if err != nil {
-// 			global.Log.Errorf("[%s]获取文件信息失败:[%s]\n", entry.Name(), err.Error())
-// 			return -1
-// 		}
-// 		if fileInfo.IsDir() {
-// 			size += FolderSize(path + "/" + entry.Name())
-// 		} else {
-// 			size += fileInfo.Size()
-// 		}
-// 	}
-// 	return size
-// }
+//
+//	func FolderSize(path string) int64 {
+//		var size int64 = 0
+//		entries, err := os.ReadDir(path)
+//		if err != nil {
+//			global.Log.Errorf("[%s]路径不合法:[%s]\n", path, err.Error())
+//			return -1
+//		}
+//		for _, entry := range entries {
+//			fileInfo, err := entry.Info()
+//			if err != nil {
+//				global.Log.Errorf("[%s]获取文件信息失败:[%s]\n", entry.Name(), err.Error())
+//				return -1
+//			}
+//			if fileInfo.IsDir() {
+//				size += FolderSize(path + "/" + entry.Name())
+//			} else {
+//				size += fileInfo.Size()
+//			}
+//		}
+//		return size
+//	}
 func FolderSize(root string) (uint64, error) {
-    var size uint64
+	var size uint64
 
-    err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-        if err != nil {
-            // 如果遇到权限问题或其他错误，记录错误但继续遍历
-            global.Log.Errorf("访问路径出错 %s: %v\n", path, err)
-            return filepath.SkipDir
-        }
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// 如果遇到权限问题或其他错误，记录错误但继续遍历
+			global.Log.Errorf("访问路径出错 %s: %v\n", path, err)
+			return filepath.SkipDir
+		}
 
-        if !d.IsDir() {
-            info, err := d.Info()
-            if err != nil {
-                global.Log.Errorf("无法获取文件信息 %s: %v\n", path, err)
-                return nil
-            }
-            atomic.AddUint64(&size, uint64(info.Size()))
-        }
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				global.Log.Errorf("无法获取文件信息 %s: %v\n", path, err)
+				return nil
+			}
+			atomic.AddUint64(&size, uint64(info.Size()))
+		}
 
-        return nil
-    })
+		return nil
+	})
 
-    if err != nil {
-        return size, fmt.Errorf("遍历目录时发生错误: %w", err)
-    }
+	if err != nil {
+		return size, fmt.Errorf("遍历目录时发生错误: %w", err)
+	}
 
-    return size, nil
+	return size, nil
 }
 
 // AllFilesSize 计算所有文件大小
@@ -374,87 +377,86 @@ func AllFilesSize(path string, names []string) uint64 {
 			ssize, _ := FolderSize(fileFullPath)
 			size += ssize
 		} else {
-			size += uint64(fileInfo.Size()) 
+			size += uint64(fileInfo.Size())
 		}
 	}
 	return size
 }
+
 // copyFileWithProgress 拷贝文件并发送进度
 func copyFileWithProgress(source, destination string, progressChan chan<- uint64, c *gin.Context) error {
-    sourceFile, err := os.Open(source)
-    if err != nil {
+	sourceFile, err := os.Open(source)
+	if err != nil {
 		global.Log.Errorf("[%s]打开文件失败:[%s]\n", source, err.Error())
-        return err
-    }
-    defer sourceFile.Close()
+		return err
+	}
+	defer sourceFile.Close()
 
-    destinationFile, err := os.Create(destination)
-    if err != nil {
+	destinationFile, err := os.Create(destination)
+	if err != nil {
 		global.Log.Errorf("[%s]创建文件失败:[%s]\n", destination, err.Error())
-        return err
-    }
-    defer destinationFile.Close()
+		return err
+	}
+	defer destinationFile.Close()
 	fmt.Fprintf(c.Writer, "data: Copying %s to %s\n\n", source, destination)
-    copiedBytes := uint64(0)
-    buffer := make([]byte, 1024*1024) // 1MB buffer
+	global.Log.Infof("当前正在进行Copying %s to %s\n", source, destination)
+	copiedBytes := uint64(0)
+	buffer := make([]byte, 1024*1024) // 1MB buffer
 
-    for {
-        n, err := sourceFile.Read(buffer)
-        if err != nil && err != io.EOF {
+	for {
+		n, err := sourceFile.Read(buffer)
+		if err != nil && err != io.EOF {
 			global.Log.Errorf("[%s]读取文件失败:[%s]\n", source, err.Error())
-            return err
-        }
-        if n == 0 {
-            break
-        }
+			return err
+		}
+		if n == 0 {
+			break
+		}
 
-        _, err = destinationFile.Write(buffer[:n])
-        if err != nil {
+		_, err = destinationFile.Write(buffer[:n])
+		if err != nil {
 			global.Log.Errorf("[%s]写入文件失败:[%s]\n", destination, err.Error())
-            return err
-        }
+			return err
+		}
 
-        copiedBytes += uint64(n)
-        progressChan <- copiedBytes
-    }
+		copiedBytes = uint64(n)
+		progressChan <- copiedBytes
+	}
 
-    return nil
+	return nil
 }
 
 // copyDirWithProgress 递归拷贝目录并发送进度
 func copyDirWithProgress(source, destination string, progressChan chan<- uint64, c *gin.Context) error {
-    entries, err := os.ReadDir(source)
-    if err != nil {
+	entries, err := os.ReadDir(source)
+	if err != nil {
 		global.Log.Errorf("[%s]读取目录失败:[%s]\n", source, err.Error())
-        return err
-    }
+		return err
+	}
 
-    if err := os.MkdirAll(destination, os.ModePerm); err != nil {
+	if err := os.MkdirAll(destination, os.ModePerm); err != nil {
 		global.Log.Errorf("[%s]创建目录失败:[%s]\n", destination, err.Error())
-        return err
-    }
+		return err
+	}
 
-    for _, entry := range entries {
-        sourcePath := filepath.Join(source, entry.Name())
-        destinationPath := filepath.Join(destination, entry.Name())
+	for _, entry := range entries {
+		sourcePath := filepath.Join(source, entry.Name())
+		destinationPath := filepath.Join(destination, entry.Name())
 
-        var err error
-        if entry.IsDir() {
-            err = copyDirWithProgress(sourcePath, destinationPath, progressChan, c)
-        } else {
-            err = copyFileWithProgress(sourcePath, destinationPath, progressChan, c)
-        }
+		var err error
+		if entry.IsDir() {
+			err = copyDirWithProgress(sourcePath, destinationPath, progressChan, c)
+		} else {
+			err = copyFileWithProgress(sourcePath, destinationPath, progressChan, c)
+		}
 
-        if err != nil {
+		if err != nil {
 			global.Log.Errorf("[%s]拷贝失败:[%s]\n", sourcePath, err.Error())
-            return err
-        }
-    }
-
-    return nil
+			return err
+		}
+	}
+	return nil
 }
-
-
 
 func CopyPasteFile(c *gin.Context) {
 	//设置SSE http长连接响应头
@@ -462,54 +464,64 @@ func CopyPasteFile(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	// 粘贴文件
-	var pasteRequest PasteRequest
-	c.BindJSON(&pasteRequest)
-	oldPath := pasteRequest.OldPath
-	newPath := pasteRequest.NewPath
-	names := pasteRequest.Names
-	global.Log.Infof("oldPath: %s, newPath: %s\n, names: %v\n", oldPath, newPath, names)
+	oldPath := c.Query("oldPath")
+	newPath := c.Query("newPath")
+	names := c.Query("names")
+	var fileNames []string
+	if err := json.Unmarshal([]byte(names), &fileNames); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "存在不合法的文件名",
+		})
+		return
+	}
+
+	global.Log.Infof("oldPath: %s, newPath: %s\n, names: %v\n", oldPath, newPath, fileNames)
 	oldPath = strings.TrimRight(oldPath, "/")
 	newPath = strings.TrimRight(newPath, "/")
 	// 计算所有文件大小
-	totalBytes := AllFilesSize(oldPath, names)
+	totalBytes := AllFilesSize(oldPath, fileNames)
+	global.Log.Infof("totalBytes: %d\n", totalBytes)
 	// 通知前端文件大小
 	fmt.Fprintf(c.Writer, "data: TotalBytes: %d\n\n", totalBytes)
 	c.Writer.(http.Flusher).Flush()
 
 	progressChan := make(chan uint64)
 	// 开启协程监测进度
-    go func() {
-        var copiedBytes uint64
-        for progress := range progressChan {
-            copiedBytes += progress
-            progressPercentage := float64(copiedBytes) / float64(totalBytes) * 100
-            fmt.Fprintf(c.Writer, "data: Percent: %.2f\n\n", progressPercentage)
-            c.Writer.(http.Flusher).Flush() // 刷新缓冲区，确保数据立即发送
-        }
-    }()
+	go func() {
+		var copiedBytes uint64
+		for progress := range progressChan {
+			copiedBytes += progress
+			progressPercentage := float64(copiedBytes) / float64(totalBytes) * 100
+			global.Log.Infof("copied: %d当前progressPercentage: %.2f\n", copiedBytes, progressPercentage)
+			fmt.Fprintf(c.Writer, "data: Percent: %.2f\n\n", progressPercentage)
+			c.Writer.(http.Flusher).Flush() // 刷新缓冲区，确保数据立即发送
+		}
+	}()
 	// 复制文件
-	for _, name := range names {
+	for _, name := range fileNames {
 		destPath := filepath.Join(newPath, name)
 		srcPath := filepath.Join(oldPath, name)
 		var err error
-        fileInfo, err := os.Stat(srcPath)
-        if err != nil {
+		fileInfo, err := os.Stat(srcPath)
+		if err != nil {
 			global.Log.Errorf("[%s]获取文件信息失败:[%s]\n", srcPath, err.Error())
-            return
-        }
+			return
+		}
 		if fileInfo.IsDir() {
-            err = copyDirWithProgress(srcPath, destPath, progressChan, c)
-        } else {
-            err = copyFileWithProgress(srcPath, destPath, progressChan, c)
-        }
+			err = copyDirWithProgress(srcPath, destPath, progressChan, c)
+		} else {
+			err = copyFileWithProgress(srcPath, destPath, progressChan, c)
+		}
 
-        if err != nil {
+		if err != nil {
 			global.Log.Errorf("[%s]拷贝失败:[%s]\n", srcPath, err.Error())
-            return 
-        }
+			return
+		}
 	}
 	close(progressChan)
-    fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
-    c.Writer.(http.Flusher).Flush()
+	fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
+	c.Writer.(http.Flusher).Flush()
+
 
 }

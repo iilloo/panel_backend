@@ -54,3 +54,10 @@ func CutPasteFile() gin.HandlerFunc{
 		services.CutPasteFile(c)
 	}
 }
+
+func CopyPasteFile() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//复制文件
+		services.CopyPasteFile(c)
+	}
+}
