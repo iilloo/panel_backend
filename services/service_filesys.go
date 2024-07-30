@@ -399,6 +399,9 @@ func copyFileWithProgress(source, destination string, progressChan chan<- uint64
 	}
 	defer destinationFile.Close()
 	fmt.Fprintf(c.Writer, "data: Copying %s to %s\n\n", source, destination)
+	fmt.Fprintf(c.Writer, "data: SrcFileName: %s\n\n", source)
+	fmt.Fprintf(c.Writer, "data: DestFileName: %s\n\n", destination)
+	c.Writer.(http.Flusher).Flush()
 	global.Log.Infof("当前正在进行Copying %s to %s\n", source, destination)
 	copiedBytes := uint64(0)
 	buffer := make([]byte, 1024*1024) // 1MB buffer
@@ -495,7 +498,12 @@ func CopyPasteFile(c *gin.Context) {
 			progressPercentage := float64(copiedBytes) / float64(totalBytes) * 100
 			global.Log.Infof("copied: %d当前progressPercentage: %.2f\n", copiedBytes, progressPercentage)
 			fmt.Fprintf(c.Writer, "data: Percent: %.2f\n\n", progressPercentage)
-			c.Writer.(http.Flusher).Flush() // 刷新缓冲区，确保数据立即发送
+			 // 刷新缓冲区，确保数据立即发送
+			if flusher, ok := c.Writer.(http.Flusher); ok {
+				flusher.Flush()
+			} else {
+				global.Log.Errorf("c.Writer does not implement http.Flusher")
+			}
 		}
 	}()
 	// 复制文件
