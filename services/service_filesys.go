@@ -490,19 +490,34 @@ func CopyPasteFile(c *gin.Context) {
 	c.Writer.(http.Flusher).Flush()
 
 	progressChan := make(chan uint64)
+	doneChan := make(chan bool)
 	// 开启协程监测进度
 	go func() {
-		var copiedBytes uint64
+		var copiedBytes uint64 = 0
+		var preProgressPercentage int = -1
 		for progress := range progressChan {
 			copiedBytes += progress
-			progressPercentage := float64(copiedBytes) / float64(totalBytes) * 100
-			global.Log.Infof("copied: %d当前progressPercentage: %.2f\n", copiedBytes, progressPercentage)
-			fmt.Fprintf(c.Writer, "data: Percent: %.2f\n\n", progressPercentage)
-			 // 刷新缓冲区，确保数据立即发送
-			if flusher, ok := c.Writer.(http.Flusher); ok {
-				flusher.Flush()
+			progressPercentage := int(float64(copiedBytes) / float64(totalBytes) * 100)
+			if progressPercentage != preProgressPercentage {
+				preProgressPercentage = progressPercentage
+				global.Log.Infof("copied: %d当前progressPercentage: %d\n", copiedBytes, progressPercentage)
+				fmt.Fprintf(c.Writer, "data: Percent: %d\n\n", progressPercentage)
+				// 刷新缓冲区，确保数据立即发送
+				if flusher, ok := c.Writer.(http.Flusher); ok {
+					if flusher != nil {
+						flusher.Flush()
+					} else {
+						global.Log.Errorf("flusher is nil")
+					}
+				} else {
+					global.Log.Errorf("c.Writer does not implement http.Flusher")
+				}
 			} else {
-				global.Log.Errorf("c.Writer does not implement http.Flusher")
+				continue
+			}
+			if copiedBytes == totalBytes {
+				doneChan <- true
+				break
 			}
 		}
 	}()
@@ -528,8 +543,9 @@ func CopyPasteFile(c *gin.Context) {
 		}
 	}
 	close(progressChan)
-	fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
-	c.Writer.(http.Flusher).Flush()
-
-
+	// 等待拷贝完成
+	if <-doneChan {
+		fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
+		c.Writer.(http.Flusher).Flush()
+	}
 }
