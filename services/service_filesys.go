@@ -278,9 +278,10 @@ func WriteFile(c *gin.Context) {
 }
 
 type PasteRequest struct {
-	OldPath string   `json:"oldPath"`
-	NewPath string   `json:"newPath"`
-	Names   []string `json:"names"`
+	OldPath     string   `json:"oldPath"`
+	NewPath     string   `json:"newPath"`
+	Names       []string `json:"names"`
+	DeleteNames []string `json:"deleteNames"`
 }
 
 func CutPasteFile(c *gin.Context) {
@@ -290,9 +291,46 @@ func CutPasteFile(c *gin.Context) {
 	oldPath := pasteRequest.OldPath
 	newPath := pasteRequest.NewPath
 	names := pasteRequest.Names
+	// deleteNames := pasteRequest.DeleteNames
 	global.Log.Infof("oldPath: %s, newPath: %s\n, names: %v\n", oldPath, newPath, names)
 	oldPath = strings.TrimRight(oldPath, "/")
 	newPath = strings.TrimRight(newPath, "/")
+	// 删除文件
+	// for _, name := range deleteNames {
+	// 	currentPath := filepath.Join(newPath, name)
+	// 	fileInfo, err := os.Stat(currentPath)
+	// 	if err != nil {
+	// 		global.Log.Errorf("[%s]获取文件信息失败:[%s]\n", currentPath, err.Error())
+	// 		c.JSON(500, gin.H{
+	// 			"code": 500,
+	// 			"msg":  "系统错误，获取欲覆盖文件信息失败",
+	// 		})
+	// 		return
+	// 	}
+	// 	if fileInfo.IsDir() {
+	// 		err := os.RemoveAll(currentPath)
+	// 		if err != nil {
+	// 			global.Log.Errorf("[%s]删除失败:[%s]\n", currentPath, err.Error())
+	// 			c.JSON(500, gin.H{
+	// 				"code": 500,
+	// 				"msg":  "系统错误，删除失败",
+	// 			})
+	// 			return
+	// 		}
+	// 	} else {
+	// 		err := os.Remove(currentPath)
+	// 		if err != nil {
+	// 			global.Log.Errorf("[%s]删除失败:[%s]\n", currentPath, err.Error())
+	// 			c.JSON(500, gin.H{
+	// 				"code": 500,
+	// 				"msg":  "系统错误，删除失败",
+	// 			})
+	// 			return
+	// 		}
+	// 	}
+	// }
+
+	//移动文件
 	for _, name := range names {
 		err := os.Rename(oldPath+"/"+name, newPath+"/"+name)
 		if err != nil {
