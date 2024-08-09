@@ -587,3 +587,23 @@ func CopyPasteFile(c *gin.Context) {
 		c.Writer.(http.Flusher).Flush()
 	}
 }
+
+func UploadFile(c *gin.Context) {
+	form, _ := c.MultipartForm()
+	files := form.File["files"]
+	path := c.PostForm("path")
+	// 去掉可能的最后一个斜杠
+	// path = strings.TrimRight(path, "/")
+	for _, file := range files {
+		// 使用filepath.Clean()去掉路径中的多余斜杠
+		dst := filepath.Join(filepath.Clean(path), file.Filename)
+		if err := c.SaveUploadedFile(file, dst); err != nil {
+			global.Log.Errorf("[%s]上传失败:[%s]\n", dst, err.Error())
+			c.JSON(500, gin.H{
+				"msg": "系统错误，上传失败",
+			})
+			return
+		}
+		global.Log.Debugf("上传[%s]成功\n", dst)
+	}
+}

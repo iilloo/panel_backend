@@ -61,3 +61,10 @@ func CopyPasteFile() gin.HandlerFunc{
 		services.CopyPasteFile(c)
 	}
 }
+
+func UploadFile() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//上传文件
+		services.UploadFile(c)
+	}
+}
