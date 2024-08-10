@@ -25,4 +25,5 @@ func FileSysRouter(router *gin.Engine) {
 	r.POST("/cutPaste", v1.CutPasteFile())
 	r.GET("/copyPaste", v1.CopyPasteFile())
 	r.POST("/uploadFile", v1.UploadFile())
+	r.GET("/uploadFileProgress", v1.UploadFileProgress())
 }

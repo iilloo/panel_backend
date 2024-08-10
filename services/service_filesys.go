@@ -587,7 +587,9 @@ func CopyPasteFile(c *gin.Context) {
 		c.Writer.(http.Flusher).Flush()
 	}
 }
+type uploadFileProgress struct {
 
+}
 func UploadFile(c *gin.Context) {
 	form, _ := c.MultipartForm()
 	files := form.File["files"]
@@ -606,4 +608,11 @@ func UploadFile(c *gin.Context) {
 		}
 		global.Log.Debugf("上传[%s]成功\n", dst)
 	}
+}
+
+func UploadFileProgress(c *gin.Context) {
+	//设置SSE http长连接响应头
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
 }

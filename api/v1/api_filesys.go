@@ -68,3 +68,10 @@ func UploadFile() gin.HandlerFunc{
 		services.UploadFile(c)
 	}
 }
+
+func UploadFileProgress() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//获取上传文件进度
+		services.UploadFileProgress(c)
+	}
+}
