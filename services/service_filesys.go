@@ -11,6 +11,7 @@ import (
 	"panel_backend/global"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -587,13 +588,20 @@ func CopyPasteFile(c *gin.Context) {
 		c.Writer.(http.Flusher).Flush()
 	}
 }
-type uploadFileProgress struct {
-
+type UploadProgress struct {
+	progress map[string]int
+	mu    sync.Mutex
+}
+func init() {
+	uprogress := &UploadProgress{
+		progress: make(map[string]int),
+	}
 }
 func UploadFile(c *gin.Context) {
 	form, _ := c.MultipartForm()
 	files := form.File["files"]
 	path := c.PostForm("path")
+	index := c.PostForm("index")
 	// 去掉可能的最后一个斜杠
 	// path = strings.TrimRight(path, "/")
 	for _, file := range files {
