@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"panel_backend/global"
@@ -588,15 +589,59 @@ func CopyPasteFile(c *gin.Context) {
 		c.Writer.(http.Flusher).Flush()
 	}
 }
-type UploadProgress struct {
-	progress map[string]int
-	mu    sync.Mutex
-}
-func init() {
-	uprogress := &UploadProgress{
-		progress: make(map[string]int),
+
+//	type UploadProgress struct {
+//		copied map[string]int
+//		mu    sync.Mutex
+//	}
+//
+//	func init() {
+//		uprogress := &UploadProgress{
+//			copied: make(map[string]int),
+//		}
+//	}
+var uploadCopied sync.Map
+var uploadTotal sync.Map
+
+func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, index string) error {
+	// 上传文件
+	src, err := resFile.Open()
+	if err != nil {
+		global.Log.Errorf("[%s]打开文件失败:[%s]\n", resFile.Filename, err.Error())
+		return err
 	}
+	defer src.Close()
+	dst, err := os.Create(destPath)
+	if err != nil {
+		global.Log.Errorf("[%s]创建文件失败:[%s]\n", destPath, err.Error())
+		return err
+	}
+	defer dst.Close()
+	buf := make([]byte, 1024*1024) // 1MB buffer
+	for {
+		n, err := src.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			global.Log.Errorf("[%s]读取文件失败:[%s]\n", resFile.Filename, err.Error())
+			return err
+		}
+		_, err = dst.Write(buf[:n])
+		if err != nil {
+			global.Log.Errorf("[%s]写入文件失败:[%s]\n", destPath, err.Error())
+			return err
+		}
+		// 记录上传进度
+		if copied, ok := uploadCopied.Load(index); ok {
+			uploadCopied.Store(index, uint64(n)+copied.(uint64))
+		} else {
+			uploadCopied.Store(index, n)
+		}
+	}
+	return nil
 }
+
 func UploadFile(c *gin.Context) {
 	form, _ := c.MultipartForm()
 	files := form.File["files"]
@@ -604,18 +649,34 @@ func UploadFile(c *gin.Context) {
 	index := c.PostForm("index")
 	// 去掉可能的最后一个斜杠
 	// path = strings.TrimRight(path, "/")
+	totalSize := uint64(0)
+	for _, file := range files {
+		totalSize += uint64(file.Size)
+	}
+	uploadTotal.Store(index, totalSize)
 	for _, file := range files {
 		// 使用filepath.Clean()去掉路径中的多余斜杠
 		dst := filepath.Join(filepath.Clean(path), file.Filename)
-		if err := c.SaveUploadedFile(file, dst); err != nil {
-			global.Log.Errorf("[%s]上传失败:[%s]\n", dst, err.Error())
+		// if err := c.SaveUploadedFile(file, dst); err != nil {
+		// 	global.Log.Errorf("[%s]上传失败:[%s]\n", dst, err.Error())
+		// 	c.JSON(500, gin.H{
+		// 		"msg": "系统错误，上传失败",
+		// 	})
+		// 	return
+		// }
+		// global.Log.Debugf("上传[%s]成功\n", dst)
+		err := UploadFileWithProgress(file, dst, index)
+		if err != nil {
 			c.JSON(500, gin.H{
-				"msg": "系统错误，上传失败",
+				"code": 500,
+				"msg":  fmt.Sprintf("系统错误，%s上传失败", file.Filename),
 			})
-			return
 		}
-		global.Log.Debugf("上传[%s]成功\n", dst)
 	}
+	c.JSON(200, gin.H{
+		"code": 200,
+		"msg":  "上传成功",
+	})
 }
 
 func UploadFileProgress(c *gin.Context) {
@@ -623,4 +684,45 @@ func UploadFileProgress(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
+	index := c.Query("index")
+	// 返回总大小
+	var tSize uint64
+	for {
+		if totalSize, ok := uploadTotal.Load(index); ok {
+			global.Log.Infof("index:%s-totalSize: %d\n", index, totalSize.(uint64))
+			fmt.Fprintf(c.Writer, "data: TotalSize: %d\n\n", totalSize.(uint64))
+			// 刷新缓冲区，确保数据立即发送
+			c.Writer.(http.Flusher).Flush()
+			uploadTotal.Delete(index)
+			tSize = totalSize.(uint64)
+			break
+		} else {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	// 返回上传进度
+	var preCopied uint64 = 0
+	var preProgressPercentage int = 0
+	for {
+		if copied, ok := uploadCopied.Load(index); ok {
+			if copied.(uint64) == preCopied {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			preCopied = copied.(uint64)
+			progressPercentage := int(float64(copied.(uint64)) / float64(tSize) * 100)
+			if progressPercentage != preProgressPercentage {
+				preProgressPercentage = progressPercentage
+				global.Log.Infof("percent: %d\n", progressPercentage)
+				fmt.Fprintf(c.Writer, "data: Percent: %d\n\n", progressPercentage)
+				// 刷新缓冲区，确保数据立即发送
+				c.Writer.(http.Flusher).Flush()
+			}
+			if copied.(uint64) == tSize {
+				fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
+				c.Writer.(http.Flusher).Flush()
+				break
+			}
+		}
+	}
 }
