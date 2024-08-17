@@ -718,6 +718,7 @@ func UploadFileProgress(c *gin.Context) {
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
 			}
+			// 上传完成
 			if copied.(uint64) == tSize {
 				fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
 				c.Writer.(http.Flusher).Flush()
