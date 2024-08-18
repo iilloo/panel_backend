@@ -602,6 +602,7 @@ func CopyPasteFile(c *gin.Context) {
 //	}
 var uploadCopied sync.Map
 var uploadTotal sync.Map
+var uploadFileName sync.Map
 
 func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, index string) error {
 	// 上传文件
@@ -610,6 +611,11 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 		global.Log.Errorf("[%s]打开文件失败:[%s]\n", resFile.Filename, err.Error())
 		return err
 	}
+	if ch, ok := uploadFileName.Load(index); ok {
+        // 将interface{}断言为chan string类型
+        chanStr := ch.(chan string)
+        chanStr <- resFile.Filename
+    }
 	defer src.Close()
 	dst, err := os.Create(destPath)
 	if err != nil {
@@ -647,6 +653,9 @@ func UploadFile(c *gin.Context) {
 	files := form.File["files"]
 	path := c.PostForm("path")
 	index := c.PostForm("index")
+	//声明一个管道，用于存储当前上传文件的名称
+	var fileNamesChan = make(chan string, len(files))
+	uploadFileName.Store(index, fileNamesChan)
 	// 去掉可能的最后一个斜杠
 	// path = strings.TrimRight(path, "/")
 	totalSize := uint64(0)
@@ -700,6 +709,18 @@ func UploadFileProgress(c *gin.Context) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	// 开启一个协程返回当前上传文件名
+	go func() {
+		if ch, ok := uploadFileName.Load(index); ok {
+			// 将interface{}断言为chan string类型
+			chanStr := ch.(chan string)
+			for name := range chanStr {
+				fmt.Fprintf(c.Writer, "data: FileName: %s\n\n", name)
+				// 刷新缓冲区，确保数据立即发送
+				c.Writer.(http.Flusher).Flush()
+			}
+		}
+	}()
 	// 返回上传进度
 	var preCopied uint64 = 0
 	var preProgressPercentage int = 0
@@ -722,6 +743,12 @@ func UploadFileProgress(c *gin.Context) {
 			if copied.(uint64) == tSize {
 				fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
 				c.Writer.(http.Flusher).Flush()
+				// 关闭对应的fileName管道，删除map中对应的数据
+				if ch, ok := uploadFileName.Load(index); ok {
+					chanStr := ch.(chan string)
+					close(chanStr)
+					uploadFileName.Delete(index)
+				}
 				break
 			}
 		}
