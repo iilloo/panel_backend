@@ -693,7 +693,7 @@ func UploadFileProgress(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	index := c.Query("index")
+	index := c.Query("TimeIndex")
 	// 返回总大小
 	var tSize uint64
 	for {
@@ -709,6 +709,7 @@ func UploadFileProgress(c *gin.Context) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	global.Log.Infof("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
 	// 开启一个协程返回当前上传文件名
 	go func() {
 		if ch, ok := uploadFileName.Load(index); ok {
