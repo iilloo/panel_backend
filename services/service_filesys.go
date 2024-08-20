@@ -603,6 +603,7 @@ func CopyPasteFile(c *gin.Context) {
 var uploadCopied sync.Map
 var uploadTotal sync.Map
 var uploadFileName sync.Map
+var uploadDone sync.Map
 
 func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, index string) error {
 	// 上传文件
@@ -612,10 +613,10 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 		return err
 	}
 	if ch, ok := uploadFileName.Load(index); ok {
-        // 将interface{}断言为chan string类型
-        chanStr := ch.(chan string)
-        chanStr <- resFile.Filename
-    }
+		// 将interface{}断言为chan string类型
+		chanStr := ch.(chan string)
+		chanStr <- resFile.Filename
+	}
 	defer src.Close()
 	dst, err := os.Create(destPath)
 	if err != nil {
@@ -645,6 +646,12 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 			uploadCopied.Store(index, n)
 		}
 	}
+	// 上传完成向相应的donechan中存入true
+	if ch, ok := uploadDone.Load(index); ok {
+		doneChan := ch.(chan bool)
+		doneChan <- true
+	}
+
 	return nil
 }
 
@@ -656,6 +663,11 @@ func UploadFile(c *gin.Context) {
 	//声明一个管道，用于存储当前上传文件的名称
 	var fileNamesChan = make(chan string, len(files))
 	uploadFileName.Store(index, fileNamesChan)
+
+	//声明一个管道，用于存储当前上传的完成状态
+	var doneChan = make(chan bool, 1)
+	uploadDone.Store(index, doneChan)
+
 	// 去掉可能的最后一个斜杠
 	// path = strings.TrimRight(path, "/")
 	totalSize := uint64(0)
@@ -704,6 +716,7 @@ func UploadFileProgress(c *gin.Context) {
 			c.Writer.(http.Flusher).Flush()
 			uploadTotal.Delete(index)
 			tSize = totalSize.(uint64)
+			global.Log.Infof("tSize: %d\n", tSize)
 			break
 		} else {
 			time.Sleep(10 * time.Millisecond)
@@ -719,39 +732,56 @@ func UploadFileProgress(c *gin.Context) {
 				fmt.Fprintf(c.Writer, "data: FileName: %s\n\n", name)
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
+				if ch, ok := uploadDone.Load(index); ok {
+					doneChan := ch.(chan bool)
+					if <-doneChan {
+						doneChan <- false
+					}
+				}
+
 			}
 		}
 	}()
-	// 返回上传进度
-	var preCopied uint64 = 0
-	var preProgressPercentage int = 0
-	for {
-		if copied, ok := uploadCopied.Load(index); ok {
-			if copied.(uint64) == preCopied {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-			preCopied = copied.(uint64)
-			progressPercentage := int(float64(copied.(uint64)) / float64(tSize) * 100)
-			if progressPercentage != preProgressPercentage {
-				preProgressPercentage = progressPercentage
-				global.Log.Infof("percent: %d\n", progressPercentage)
-				fmt.Fprintf(c.Writer, "data: Percent: %d\n\n", progressPercentage)
-				// 刷新缓冲区，确保数据立即发送
-				c.Writer.(http.Flusher).Flush()
-			}
-			// 上传完成
-			if copied.(uint64) == tSize {
-				fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
-				c.Writer.(http.Flusher).Flush()
-				// 关闭对应的fileName管道，删除map中对应的数据
-				if ch, ok := uploadFileName.Load(index); ok {
-					chanStr := ch.(chan string)
-					close(chanStr)
-					uploadFileName.Delete(index)
-				}
-				break
-			}
+	
+	// // 返回上传进度
+	// var preCopied uint64 = 0
+	// var preProgressPercentage int = 0
+	// for {
+	// 	if copied, ok := uploadCopied.Load(index); ok {
+	// 		if copied.(uint64) == preCopied {
+	// 			time.Sleep(10 * time.Millisecond)
+	// 			continue
+	// 		}
+	// 		preCopied = copied.(uint64)
+	// 		progressPercentage := int(float64(copied.(uint64)) / float64(tSize) * 100)
+	// 		if progressPercentage != preProgressPercentage {
+	// 			preProgressPercentage = progressPercentage
+	// 			global.Log.Infof("percent: %d\n", progressPercentage)
+	// 			fmt.Fprintf(c.Writer, "data: Percent: %d\n\n", progressPercentage)
+	// 			// 刷新缓冲区，确保数据立即发送
+	// 			c.Writer.(http.Flusher).Flush()
+	// 		}
+	// 		// 上传完成
+	// 		if copied.(uint64) == tSize {
+	// 			fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
+	// 			c.Writer.(http.Flusher).Flush()
+	// 			// 关闭对应的fileName管道，删除map中对应的数据
+	// 			if ch, ok := uploadFileName.Load(index); ok {
+	// 				chanStr := ch.(chan string)
+	// 				close(chanStr)
+	// 				uploadFileName.Delete(index)
+	// 			}
+	// 			break
+	// 		}
+	// 	}
+	// }
+
+	if ch, ok := uploadDone.Load(index); ok {
+		doneChan := ch.(chan bool)
+		//保证上面的协程先结束，此函数再结束，否则c *gin.Context会被释放,会导致协程中的c.Writer.(http.Flusher).Flush()报错
+		if !<-doneChan {
+			fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
+			c.Writer.(http.Flusher).Flush()
 		}
 	}
 }
