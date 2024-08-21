@@ -600,9 +600,10 @@ func CopyPasteFile(c *gin.Context) {
 //			copied: make(map[string]int),
 //		}
 //	}
-var uploadCopied sync.Map
+// var uploadCopied sync.Map
 var uploadTotal sync.Map
 var uploadFileName sync.Map
+
 var uploadDone sync.Map
 
 func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, index string) error {
@@ -640,11 +641,11 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 			return err
 		}
 		// 记录上传进度
-		if copied, ok := uploadCopied.Load(index); ok {
-			uploadCopied.Store(index, uint64(n)+copied.(uint64))
-		} else {
-			uploadCopied.Store(index, n)
-		}
+		// if copied, ok := uploadCopied.Load(index); ok {
+		// 	uploadCopied.Store(index, uint64(n)+copied.(uint64))
+		// } else {
+		// 	uploadCopied.Store(index, n)
+		// }
 	}
 	// 上传完成向相应的donechan中存入true
 	if ch, ok := uploadDone.Load(index); ok {
@@ -724,6 +725,8 @@ func UploadFileProgress(c *gin.Context) {
 	}
 	global.Log.Infof("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
 	// 开启一个协程返回当前上传文件名
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		if ch, ok := uploadFileName.Load(index); ok {
 			// 将interface{}断言为chan string类型
@@ -732,17 +735,11 @@ func UploadFileProgress(c *gin.Context) {
 				fmt.Fprintf(c.Writer, "data: FileName: %s\n\n", name)
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
-				if ch, ok := uploadDone.Load(index); ok {
-					doneChan := ch.(chan bool)
-					if <-doneChan {
-						doneChan <- false
-					}
-				}
-
+				wg.Done()
 			}
 		}
 	}()
-	
+
 	// // 返回上传进度
 	// var preCopied uint64 = 0
 	// var preProgressPercentage int = 0
@@ -778,10 +775,23 @@ func UploadFileProgress(c *gin.Context) {
 
 	if ch, ok := uploadDone.Load(index); ok {
 		doneChan := ch.(chan bool)
-		//保证上面的协程先结束，此函数再结束，否则c *gin.Context会被释放,会导致协程中的c.Writer.(http.Flusher).Flush()报错
-		if !<-doneChan {
-			fmt.Fprintf(c.Writer, "data: Copy operation completed!\n\n")
+		if <-doneChan {
+			fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
+			global.Log.Infof("cccccccccccccccccccccccccccccccccc\n")
 			c.Writer.(http.Flusher).Flush()
+			// 关闭对应的fileName管道，删除map中对应的数据
+			if ch, ok := uploadFileName.Load(index); ok {
+				chanStr := ch.(chan string)
+				close(chanStr)
+				uploadFileName.Delete(index)
+			}
+
 		}
+		// 删除对应的doneChan，防止内存泄漏，删除map中对应的数据
+		close(doneChan)
+		uploadDone.Delete(index)
 	}
+	// 等待wg.Wait()
+	wg.Wait()
+	global.Log.Infof("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
 }
