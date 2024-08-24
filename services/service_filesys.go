@@ -600,12 +600,15 @@ func CopyPasteFile(c *gin.Context) {
 //			copied: make(map[string]int),
 //		}
 //	}
+//
 // var uploadCopied sync.Map
 var uploadTotal sync.Map
+var uploadFileCount sync.Map
 var uploadFileName sync.Map
 
 var uploadDone sync.Map
 
+// 上传单个文件，并记录当前上传文件名，和已上传大小
 func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, index string) error {
 	// 上传文件
 	src, err := resFile.Open()
@@ -614,6 +617,7 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 		return err
 	}
 	if ch, ok := uploadFileName.Load(index); ok {
+		global.Log.Infof("记录当前上传文件名%s成功\n", resFile.Filename)
 		// 将interface{}断言为chan string类型
 		chanStr := ch.(chan string)
 		chanStr <- resFile.Filename
@@ -647,15 +651,11 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 		// 	uploadCopied.Store(index, n)
 		// }
 	}
-	// 上传完成向相应的donechan中存入true
-	if ch, ok := uploadDone.Load(index); ok {
-		doneChan := ch.(chan bool)
-		doneChan <- true
-	}
 
 	return nil
 }
 
+// UploadFile 上传文件
 func UploadFile(c *gin.Context) {
 	form, _ := c.MultipartForm()
 	files := form.File["files"]
@@ -664,6 +664,9 @@ func UploadFile(c *gin.Context) {
 	//声明一个管道，用于存储当前上传文件的名称
 	var fileNamesChan = make(chan string, len(files))
 	uploadFileName.Store(index, fileNamesChan)
+
+	//存储文件的个数
+	uploadFileCount.Store(index, len(files))
 
 	//声明一个管道，用于存储当前上传的完成状态
 	var doneChan = make(chan bool, 1)
@@ -679,14 +682,7 @@ func UploadFile(c *gin.Context) {
 	for _, file := range files {
 		// 使用filepath.Clean()去掉路径中的多余斜杠
 		dst := filepath.Join(filepath.Clean(path), file.Filename)
-		// if err := c.SaveUploadedFile(file, dst); err != nil {
-		// 	global.Log.Errorf("[%s]上传失败:[%s]\n", dst, err.Error())
-		// 	c.JSON(500, gin.H{
-		// 		"msg": "系统错误，上传失败",
-		// 	})
-		// 	return
-		// }
-		// global.Log.Debugf("上传[%s]成功\n", dst)
+		//err := c.SaveUploadedFile(file, dst)
 		err := UploadFileWithProgress(file, dst, index)
 		if err != nil {
 			c.JSON(500, gin.H{
@@ -695,6 +691,12 @@ func UploadFile(c *gin.Context) {
 			})
 		}
 	}
+	// 上传完成向相应的donechan中存入true
+	if ch, ok := uploadDone.Load(index); ok {
+		doneChan := ch.(chan bool)
+		doneChan <- true
+	}
+
 	c.JSON(200, gin.H{
 		"code": 200,
 		"msg":  "上传成功",
@@ -728,29 +730,44 @@ func UploadFileProgress(c *gin.Context) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		var count int = 0
+		if s, ok := uploadFileCount.Load(index); ok {
+			count = s.(int)
+		} else {
+			global.Log.Errorf("uploadFileCount.Load(index)失败\n")
+		}
 		if ch, ok := uploadFileName.Load(index); ok {
 			// 将interface{}断言为chan string类型
 			chanStr := ch.(chan string)
+			var i int = 0
 			for name := range chanStr {
+				i++
 				fmt.Fprintf(c.Writer, "data: FileName: %s\n\n", name)
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
-				wg.Done()
+				global.Log.Infof("name: %s\n", name)
+				if i == count {
+					break
+				}
 			}
+		} else {
+			global.Log.Errorf("uploadFileName.Load(index)失败\n")
 		}
 	}()
 
-	// // 返回上传进度
+	// 返回上传进度
 	// var preCopied uint64 = 0
 	// var preProgressPercentage int = 0
 	// for {
 	// 	if copied, ok := uploadCopied.Load(index); ok {
-	// 		if copied.(uint64) == preCopied {
+	// 		tmp := copied.(uint64)
+	// 		if tmp == preCopied {
 	// 			time.Sleep(10 * time.Millisecond)
 	// 			continue
 	// 		}
-	// 		preCopied = copied.(uint64)
-	// 		progressPercentage := int(float64(copied.(uint64)) / float64(tSize) * 100)
+	// 		preCopied = tmp
+	// 		progressPercentage := int(float64(tmp) / float64(tSize) * 100)
 	// 		if progressPercentage != preProgressPercentage {
 	// 			preProgressPercentage = progressPercentage
 	// 			global.Log.Infof("percent: %d\n", progressPercentage)
@@ -760,8 +777,6 @@ func UploadFileProgress(c *gin.Context) {
 	// 		}
 	// 		// 上传完成
 	// 		if copied.(uint64) == tSize {
-	// 			fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
-	// 			c.Writer.(http.Flusher).Flush()
 	// 			// 关闭对应的fileName管道，删除map中对应的数据
 	// 			if ch, ok := uploadFileName.Load(index); ok {
 	// 				chanStr := ch.(chan string)
@@ -775,17 +790,17 @@ func UploadFileProgress(c *gin.Context) {
 
 	if ch, ok := uploadDone.Load(index); ok {
 		doneChan := ch.(chan bool)
+		//阻塞在这里，直到上传完成
 		if <-doneChan {
-			fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
+			// 这里可能存在的问题：返回给前端已complete但上面协程的返回文件名还未完成
+			// fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
 			global.Log.Infof("cccccccccccccccccccccccccccccccccc\n")
-			c.Writer.(http.Flusher).Flush()
-			// 关闭对应的fileName管道，删除map中对应的数据
-			if ch, ok := uploadFileName.Load(index); ok {
-				chanStr := ch.(chan string)
-				close(chanStr)
-				uploadFileName.Delete(index)
-			}
-
+			// c.Writer.(http.Flusher).Flush()
+			// if ch, ok := uploadFileName.Load(index); ok {
+			// 	chanStr := ch.(chan string)
+			// 	close(chanStr)
+			// 	uploadFileName.Delete(index)
+			// }
 		}
 		// 删除对应的doneChan，防止内存泄漏，删除map中对应的数据
 		close(doneChan)
@@ -793,5 +808,16 @@ func UploadFileProgress(c *gin.Context) {
 	}
 	// 等待wg.Wait()
 	wg.Wait()
+	//删除对应的fileName管道，删除map中对应的数据
+	if ch, ok := uploadFileName.Load(index); ok {
+		chanStr := ch.(chan string)
+		close(chanStr)
+		uploadFileName.Delete(index)
+	}
+	//删除对应的uploadFileCount map中对应的数据
+	uploadFileCount.Delete(index)
+	// 等待上传文件名完全返回后再返回complete，之后前端关闭SSE连接
+	fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
+	c.Writer.(http.Flusher).Flush()
 	global.Log.Infof("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
 }
