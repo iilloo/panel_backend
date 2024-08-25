@@ -601,7 +601,7 @@ func CopyPasteFile(c *gin.Context) {
 //		}
 //	}
 //
-// var uploadCopied sync.Map
+var uploadCopied sync.Map
 var uploadTotal sync.Map
 var uploadFileCount sync.Map
 var uploadFileName sync.Map
@@ -645,11 +645,11 @@ func UploadFileWithProgress(resFile *multipart.FileHeader, destPath string, inde
 			return err
 		}
 		// 记录上传进度
-		// if copied, ok := uploadCopied.Load(index); ok {
-		// 	uploadCopied.Store(index, uint64(n)+copied.(uint64))
-		// } else {
-		// 	uploadCopied.Store(index, n)
-		// }
+		if copied, ok := uploadCopied.Load(index); ok {
+			uploadCopied.Store(index, uint64(n)+copied.(uint64))
+		} else {
+			uploadCopied.Store(index, uint64(n))
+		}
 	}
 
 	return nil
@@ -757,36 +757,32 @@ func UploadFileProgress(c *gin.Context) {
 	}()
 
 	// 返回上传进度
-	// var preCopied uint64 = 0
-	// var preProgressPercentage int = 0
-	// for {
-	// 	if copied, ok := uploadCopied.Load(index); ok {
-	// 		tmp := copied.(uint64)
-	// 		if tmp == preCopied {
-	// 			time.Sleep(10 * time.Millisecond)
-	// 			continue
-	// 		}
-	// 		preCopied = tmp
-	// 		progressPercentage := int(float64(tmp) / float64(tSize) * 100)
-	// 		if progressPercentage != preProgressPercentage {
-	// 			preProgressPercentage = progressPercentage
-	// 			global.Log.Infof("percent: %d\n", progressPercentage)
-	// 			fmt.Fprintf(c.Writer, "data: Percent: %d\n\n", progressPercentage)
-	// 			// 刷新缓冲区，确保数据立即发送
-	// 			c.Writer.(http.Flusher).Flush()
-	// 		}
-	// 		// 上传完成
-	// 		if copied.(uint64) == tSize {
-	// 			// 关闭对应的fileName管道，删除map中对应的数据
-	// 			if ch, ok := uploadFileName.Load(index); ok {
-	// 				chanStr := ch.(chan string)
-	// 				close(chanStr)
-	// 				uploadFileName.Delete(index)
-	// 			}
-	// 			break
-	// 		}
-	// 	}
-	// }
+	var preCopied uint64 = 0
+	var preProgressPercentage int = 0
+	for {
+		if copied, ok := uploadCopied.Load(index); ok {
+			tmp := copied.(uint64)
+			if tmp == preCopied {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			preCopied = tmp
+			progressPercentage := int(float64(tmp) / float64(tSize) * 100)
+			if progressPercentage != preProgressPercentage {
+				preProgressPercentage = progressPercentage
+				global.Log.Infof("percent: %d\n", progressPercentage)
+				fmt.Fprintf(c.Writer, "data: progressPercentage: %d\n\n", progressPercentage)
+				// 刷新缓冲区，确保数据立即发送
+				c.Writer.(http.Flusher).Flush()
+			}
+			// 上传完成
+			if copied.(uint64) == tSize {
+				// 删除对应的uploadCopied map中对应的数据
+				uploadCopied.Delete(index)
+				break
+			}
+		}
+	}
 
 	if ch, ok := uploadDone.Load(index); ok {
 		doneChan := ch.(chan bool)
