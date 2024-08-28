@@ -774,6 +774,8 @@ func UploadFileProgress(c *gin.Context) {
 				fmt.Fprintf(c.Writer, "data: progressPercentage: %d\n\n", progressPercentage)
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
+
+				
 			}
 			// 上传完成
 			if copied.(uint64) == tSize {
