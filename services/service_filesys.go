@@ -703,6 +703,11 @@ func UploadFile(c *gin.Context) {
 	})
 }
 
+//上传文件夹
+func UploadFolder(c *gin.Context) {
+
+}
+
 func UploadFileProgress(c *gin.Context) {
 	//设置SSE http长连接响应头
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
