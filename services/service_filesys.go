@@ -660,7 +660,7 @@ func UploadFile(c *gin.Context) {
 	form, _ := c.MultipartForm()
 	files := form.File["files"]
 	path := c.PostForm("path")
-	index := c.PostForm("index")
+	index := c.PostForm("timeIndex")
 	//声明一个管道，用于存储当前上传文件的名称
 	var fileNamesChan = make(chan string, len(files))
 	uploadFileName.Store(index, fileNamesChan)
@@ -713,7 +713,7 @@ func UploadFileProgress(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	index := c.Query("TimeIndex")
+	index := c.Query("timeIndex")
 	// 返回总大小
 	var tSize uint64
 	for {
