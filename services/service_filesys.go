@@ -600,7 +600,6 @@ func CopyPasteFile(c *gin.Context) {
 //			copied: make(map[string]int),
 //		}
 //	}
-//
 var uploadCopied sync.Map
 var uploadTotal sync.Map
 var uploadFileCount sync.Map
@@ -703,8 +702,77 @@ func UploadFile(c *gin.Context) {
 	})
 }
 
-//上传文件夹
+// 上传文件夹
 func UploadFolder(c *gin.Context) {
+	// 获取path、index等信息
+	path := c.PostForm("path")
+	index := c.PostForm("timeIndex")
+	// 获取上传的文件
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 获取文件夹名称
+	folders := form.Value["folders"]
+	filesCount := 0
+	totalSize := uint64(0)
+	for _, folderName := range folders {
+		key := fmt.Sprintf("files[%s]", folderName)
+		files := form.File[key]
+		filesCount += len(files)
+		for _, file := range files {
+			totalSize += uint64(file.Size)
+		}
+	}
+	uploadTotal.Store(index, totalSize)
+	//声明一个管道，用于存储当前上传文件的名称
+	var fileNamesChan = make(chan string, filesCount)
+	uploadFileName.Store(index, fileNamesChan)
+
+	//存储文件的个数
+	uploadFileCount.Store(index, filesCount)
+
+	//声明一个管道，用于存储当前上传的完成状态
+	var doneChan = make(chan bool, 1)
+	uploadDone.Store(index, doneChan)
+
+
+	// 遍历所有文件夹名称
+	for _, folderName := range folders {
+		// 创建文件夹路径
+		folderPath := filepath.Join(filepath.Clean(path), folderName)
+		if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+			os.MkdirAll(folderPath, os.ModePerm) // 创建文件夹
+		}
+
+		// 获取当前文件夹下的所有文件
+		key := fmt.Sprintf("files[%s]", folderName)
+		files := form.File[key]
+
+		// 保存文件到服务器
+		for _, file := range files {
+			dst := filepath.Join(folderPath, file.Filename)
+			err := UploadFileWithProgress(file, dst, index)
+			if err != nil {
+				c.JSON(500, gin.H{
+					"code": 500,
+					"msg":  fmt.Sprintf("系统错误，%s上传失败", file.Filename),
+				})
+			}
+		}
+	}
+	// 上传完成向相应的donechan中存入true
+	if ch, ok := uploadDone.Load(index); ok {
+		doneChan := ch.(chan bool)
+		doneChan <- true
+	}
+
+	c.JSON(200, gin.H{
+		"code": 200,
+		"msg":  "上传成功",
+	})
 
 }
 
@@ -780,7 +848,6 @@ func UploadFileProgress(c *gin.Context) {
 				// 刷新缓冲区，确保数据立即发送
 				c.Writer.(http.Flusher).Flush()
 
-				
 			}
 			// 上传完成
 			if copied.(uint64) == tSize {
