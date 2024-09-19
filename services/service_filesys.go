@@ -738,7 +738,6 @@ func UploadFolder(c *gin.Context) {
 	var doneChan = make(chan bool, 1)
 	uploadDone.Store(index, doneChan)
 
-
 	// 遍历所有文件夹名称
 	for _, folderName := range folders {
 		// 创建文件夹路径
@@ -890,4 +889,66 @@ func UploadFileProgress(c *gin.Context) {
 	fmt.Fprintf(c.Writer, "data: Upload operation completed!\n\n")
 	c.Writer.(http.Flusher).Flush()
 	global.Log.Infof("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+}
+type fileInfo struct {
+	Name string `json:"name"`
+	IsDir bool `json:"isDir"`
+}
+
+type downloadFileInfo struct {
+	Path  string   `json:"path"`
+	FilesInfo []fileInfo `json:"filesInfo"`
+}
+
+func singleFileDownload(c *gin.Context, path string, name string) {
+	// 打开文件
+	fileFullPath := filepath.Join(path, name)
+	file, err := os.Open(fileFullPath)
+	if err != nil {
+		global.Log.Errorf("Failed to open file: %s, error: %v", fileFullPath, err)
+		c.JSON(500, gin.H{
+			"code": 500,
+			"msg":  "File not found",
+		})
+		return
+	}
+	defer file.Close()
+
+	// 获取文件信息
+	fileInfo, err := file.Stat()
+	if err != nil {
+		global.Log.Errorf("Failed to get file info: %v", err)
+		c.String(http.StatusInternalServerError, "Error retrieving file info")
+		return
+	}
+
+	// 设置响应头，告诉浏览器是文件下载
+	c.Writer.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(fileFullPath))
+	c.Writer.Header().Set("Content-Length", string(fileInfo.Size()))
+	c.Writer.Header().Set("Content-Type", "application/octet-stream")
+
+	// 流式传输文件
+	if _, err := io.Copy(c.Writer, file); err != nil {
+		global.Log.Printf("Failed to copy file to response: %v", err)
+	}
+}
+
+func DownloadFile(c *gin.Context) {
+	var downloadFileInfo downloadFileInfo
+	c.BindJSON(&downloadFileInfo)
+	path := downloadFileInfo.Path
+	filesInfo := downloadFileInfo.FilesInfo
+	if len(filesInfo) == 1 && !filesInfo[0].IsDir {
+		// 单个文件，直接传输
+		singleFileDownload(c, path, filesInfo[0].Name)
+	} else if len(filesInfo) > 1 || (len(filesInfo) == 1 && filesInfo[0].IsDir) {
+		// 多个文件，打包成 zip 压缩包
+		multipleFilesDownload(c, path, names)
+	} else {
+		c.JSON(400, gin.H{
+			"code": 400,
+			"msg":  "下载文件为空",
+		})
+	}
+
 }

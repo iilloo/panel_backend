@@ -82,3 +82,11 @@ func UploadFileProgress() gin.HandlerFunc{
 		services.UploadFileProgress(c)
 	}
 }
+
+//文件下载
+func DownloadFile() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//下载文件
+		services.DownloadFile(c)
+	}
+}

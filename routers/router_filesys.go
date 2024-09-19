@@ -29,4 +29,5 @@ func FileSysRouter(router *gin.Engine) {
 
 	r.POST("/uploadFolder", v1.UploadFolder())
 	// r.GET("/uploadFolderProgress", v1.UploadFolderProgress())
+	r.GET("/downloadFile", v1.DownloadFile())
 }
