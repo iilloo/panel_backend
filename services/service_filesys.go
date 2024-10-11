@@ -1,11 +1,13 @@
 package services
 
 import (
+	"archive/zip"
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	_ "io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -890,6 +892,8 @@ func UploadFileProgress(c *gin.Context) {
 	c.Writer.(http.Flusher).Flush()
 	global.Log.Infof("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
 }
+
+//以下为下载文件的代码
 type fileInfo struct {
 	Name string `json:"name"`
 	IsDir bool `json:"isDir"`
@@ -933,6 +937,132 @@ func singleFileDownload(c *gin.Context, path string, name string) {
 	}
 }
 
+
+func addFileToZip(zipWriter *zip.Writer, fileFullPath string, prefix string) error {
+	file, err := os.Open(fileFullPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 获取文件信息
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 创建一个文件头
+	header, err := zip.FileInfoHeader(fileInfo)
+	if err != nil {
+		return err
+	}
+
+	// 设置文件头中的文件名
+	header.Name = prefix + fileInfo.Name()
+
+	// 写入文件头
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	// 写入文件内容
+	_, err = io.Copy(writer, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func addDirToZip(zipWriter *zip.Writer, dirPath string, prefix string) error {
+	// 读取目录下的所有文件
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(dirPath, entry.Name())
+		if entry.IsDir() {
+			// 如果是目录，递归添加目录下的所有文件
+			err = addDirToZip(zipWriter, entryPath, prefix+entry.Name()+"/")
+		} else {
+			// 如果是文件，直接添加
+			err = addFileToZip(zipWriter, entryPath, prefix)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
+	// 在path目录下创建一个临时文件夹download
+	tempDir, err := os.MkdirTemp(path, "download")
+	if err != nil {
+		global.Log.Errorf("Failed to create temp dir: %v", err)
+		c.JSON(500, gin.H{
+			"code": 500,
+			"msg":  "Failed to create temp dir",
+		})
+		return
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 创建一个 zip 文件
+	zipFileName := filepath.Join(tempDir, "download.zip")
+	zipFile, err := os.Create(zipFileName)
+	if err != nil {
+		global.Log.Errorf("Failed to create zip file: %v", err)
+		c.JSON(500, gin.H{
+			"code": 500,
+			"msg":  "Failed to create zip file",
+		})
+		return
+	}
+	defer zipFile.Close()
+
+	// 创建 zip writer
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// 将文件添加到 zip 文件
+	for _, fileInfo := range filesInfo {
+		fileFullPath := filepath.Join(path, fileInfo.Name)
+		if fileInfo.IsDir {
+			// 如果是目录，递归添加目录下的所有文件
+			err = addDirToZip(zipWriter, fileFullPath, "")
+		} else {
+			// 如果是文件，直接添加
+			err = addFileToZip(zipWriter, fileFullPath, "")
+		}
+		if err != nil {
+			global.Log.Errorf("Failed to add file to zip: %v", err)
+			c.JSON(500, gin.H{
+				"code": 500,
+				"msg":  "Failed to add file to zip",
+			})
+			return
+		}
+	}
+
+	// 设置响应头，告诉浏览器是文件下载
+	c.Writer.Header().Set("Content-Disposition", "attachment; filename=download.zip")
+	
+	c.Writer.Header().Set("Content-Length", string(func () fs.FileInfo {
+		fileInfo, _ := zipFile.Stat()
+		return fileInfo
+	}().Size()))
+	c.Writer.Header().Set("Content-Type", "application/octet-stream")
+
+	// 流式传输文件
+	if _, err := io.Copy(c.Writer, zipFile); err != nil {
+		global.Log.Errorf("Failed to copy file to response: %v", err)
+	}
+}
+
 func DownloadFile(c *gin.Context) {
 	var downloadFileInfo downloadFileInfo
 	c.BindJSON(&downloadFileInfo)
@@ -943,12 +1073,12 @@ func DownloadFile(c *gin.Context) {
 		singleFileDownload(c, path, filesInfo[0].Name)
 	} else if len(filesInfo) > 1 || (len(filesInfo) == 1 && filesInfo[0].IsDir) {
 		// 多个文件，打包成 zip 压缩包
-		multipleFilesDownload(c, path, names)
+		multipleFilesDownload(c, path, filesInfo)
+
 	} else {
 		c.JSON(400, gin.H{
 			"code": 400,
 			"msg":  "下载文件为空",
 		})
 	}
-
 }
