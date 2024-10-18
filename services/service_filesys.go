@@ -899,10 +899,10 @@ type fileInfo struct {
 	IsDir bool `json:"isDir"`
 }
 
-type downloadFileInfo struct {
-	Path  string   `json:"path"`
-	FilesInfo []fileInfo `json:"filesInfo"`
-}
+// type downloadFileInfo struct {
+// 	Path  string   `json:"path"`
+// 	FilesInfo []fileInfo `json:"filesInfo"`
+// }
 
 func singleFileDownload(c *gin.Context, path string, name string) {
 	// 打开文件
@@ -927,10 +927,10 @@ func singleFileDownload(c *gin.Context, path string, name string) {
 	}
 
 	// 设置响应头，告诉浏览器是文件下载
-	c.Writer.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(fileFullPath))
-	c.Writer.Header().Set("Content-Length", string(fileInfo.Size()))
-	c.Writer.Header().Set("Content-Type", "application/octet-stream")
-
+	c.Writer.Header().Set("Content-Disposition", "attachment; filename=" + filepath.Base(fileFullPath))
+	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	c.Writer.Header().Set("Content-Type", "text/plain")
+	global.Log.Infof("aaaaaaaaaaaaaaaaaaaaa\n")
 	// 流式传输文件
 	if _, err := io.Copy(c.Writer, file); err != nil {
 		global.Log.Printf("Failed to copy file to response: %v", err)
@@ -1064,10 +1064,28 @@ func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 }
 
 func DownloadFile(c *gin.Context) {
-	var downloadFileInfo downloadFileInfo
-	c.BindJSON(&downloadFileInfo)
-	path := downloadFileInfo.Path
-	filesInfo := downloadFileInfo.FilesInfo
+	// global.Log.Infof("-------------------------DownloadFile\n")
+	// global.Log.Infof("c.Request.Body: %v\n", c.Request.Body)
+	// 获取 path 参数
+    path := c.Query("path")
+    // 获取 filesInfo 参数（JSON 字符串）
+    filesInfoStr := c.Query("filesInfo")
+
+	// 定义存储解析后数据的切片
+    var filesInfo []fileInfo
+
+    // 解析 JSON 字符串为 FileInfo 结构体
+    if err := json.Unmarshal([]byte(filesInfoStr), &filesInfo); err != nil {
+        c.JSON(400, gin.H{
+			"code": 400,
+			"msg":  "欲下载文件信息后端解析失败",
+		})
+        return
+    }
+	global.Log.Infof("path: %s, filesInfo: %s\n", path, filesInfoStr)
+	// var downloadFileInfo downloadFileInfo
+	
+	global.Log.Debugf("下载[%s]文件,文件为[%v]\n", path, filesInfo)
 	if len(filesInfo) == 1 && !filesInfo[0].IsDir {
 		// 单个文件，直接传输
 		singleFileDownload(c, path, filesInfo[0].Name)
