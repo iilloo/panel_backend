@@ -18,7 +18,7 @@ func CorsMiddle() gin.HandlerFunc {
 	}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "Accept", "token", "Override"}
-	config.ExposeHeaders = []string{"Content-Length", "panel-token"}
+	config.ExposeHeaders = []string{"Content-Length", "panel-token", "Need-ResponseHeader", "Content-Disposition"}
 	config.AllowCredentials = true
 	config.MaxAge = time.Hour
 
