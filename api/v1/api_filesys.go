@@ -90,3 +90,10 @@ func DownloadFile() gin.HandlerFunc{
 		services.DownloadFile(c)
 	}
 }
+
+func DownloadFileGetSignature() gin.HandlerFunc{
+	return func(c *gin.Context) {
+		//获取下载文件的签名
+		services.DownloadFileGetSignature(c)
+	}
+}

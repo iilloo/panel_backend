@@ -12,12 +12,13 @@ import (
 func JWTMiddle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		//排除登录接口和websocket接口
-		if (c.Request.URL.Path == "/login" || c.Request.URL.Path == "/ws") {
+		if (c.Request.URL.Path == "/login" || c.Request.URL.Path == "/ws" || c.Request.URL.Path == "/fileSys/downloadFile") {
 			c.Next()
 		} else {
 			authoToken := c.GetHeader("Authorization")
+			global.Log.Infof("Authorization: %v\n", authoToken)
 			if authoToken == "" {
-				global.Log.Warnf("[%s]请求未携带token，无权限访问\n",c.RemoteIP())
+				global.Log.Warnf("[%s的%s]请求未携带token，无权限访问\n",c.RemoteIP(), c.Request.URL)
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"code": 401,
 					"msg":  "请求未携带token，无权限访问",
