@@ -3,6 +3,9 @@ package services
 import (
 	"archive/zip"
 	"bufio"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +13,7 @@ import (
 	_ "io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"panel_backend/global"
 	"path/filepath"
@@ -21,6 +25,7 @@ import (
 	"panel_backend/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func SearchFile(c *gin.Context) {
@@ -893,10 +898,10 @@ func UploadFileProgress(c *gin.Context) {
 	global.Log.Infof("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
 }
 
-//以下为下载文件的代码
+// 以下为下载文件的代码
 type fileInfo struct {
-	Name string `json:"name"`
-	IsDir bool `json:"isDir"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
 }
 
 // type downloadFileInfo struct {
@@ -925,26 +930,30 @@ func singleFileDownload(c *gin.Context, path string, name string) {
 		c.String(http.StatusInternalServerError, "Error retrieving file info")
 		return
 	}
-
+	global.Log.Infof("下载的文件的size：%d\n", fileInfo.Size())
+	global.Log.Infof("下载的文件的名字：%v\n", name)
 	// 设置响应头，告诉浏览器是文件下载
-	c.Writer.Header().Set("Content-Disposition", "attachment; filename=" + filepath.Base(fileFullPath))
+	c.Writer.Header().Set("Need-ResponseHeader", "true")
+	// // 对文件名进行 URL 编码, 确保浏览器能正确解析中文文件名
+	encodedName := url.QueryEscape(filepath.Base(fileFullPath))
+	c.Writer.Header().Set("Content-Disposition", "attachment; filename="+encodedName)
 	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	global.Log.Infof("aaaaaaaaaaaaaaaaaaaaa\n")
+	c.Writer.Header().Set("Content-Type", "application/octet-stream")
 	// 流式传输文件
 	if _, err := io.Copy(c.Writer, file); err != nil {
 		global.Log.Printf("Failed to copy file to response: %v", err)
 	}
 }
 
-
 func addFileToZip(zipWriter *zip.Writer, fileFullPath string, prefix string) error {
+	// 打开文件
 	file, err := os.Open(fileFullPath)
 	if err != nil {
+		global.Log.Errorf("Failed to open file: %s, error: %v", fileFullPath, err)
 		return err
 	}
 	defer file.Close()
-
+	global.Log.Infof("prefix: %s\n", prefix) ////////////////////////////
 	// 获取文件信息
 	fileInfo, err := file.Stat()
 	if err != nil {
@@ -958,7 +967,8 @@ func addFileToZip(zipWriter *zip.Writer, fileFullPath string, prefix string) err
 	}
 
 	// 设置文件头中的文件名
-	header.Name = prefix + fileInfo.Name()
+	global.Log.Infof("fileName: %s\n", fileInfo.Name()) ////////////////////////////
+	header.Name = fileInfo.Name()
 
 	// 写入文件头
 	writer, err := zipWriter.CreateHeader(header)
@@ -1001,6 +1011,7 @@ func addDirToZip(zipWriter *zip.Writer, dirPath string, prefix string) error {
 func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 	// 在path目录下创建一个临时文件夹download
 	tempDir, err := os.MkdirTemp(path, "download")
+	global.Log.Infof("tempDir: %s\n", tempDir) ////////////////////////////
 	if err != nil {
 		global.Log.Errorf("Failed to create temp dir: %v", err)
 		c.JSON(500, gin.H{
@@ -1009,11 +1020,12 @@ func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 		})
 		return
 	}
-	defer os.RemoveAll(tempDir)
+	// defer os.RemoveAll(tempDir)
 
 	// 创建一个 zip 文件
 	zipFileName := filepath.Join(tempDir, "download.zip")
 	zipFile, err := os.Create(zipFileName)
+	global.Log.Infof("zipFileName: %s\n", zipFileName) ////////////////////////////
 	if err != nil {
 		global.Log.Errorf("Failed to create zip file: %v", err)
 		c.JSON(500, gin.H{
@@ -1022,11 +1034,11 @@ func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 		})
 		return
 	}
-	defer zipFile.Close()
+	// defer zipFile.Close()
 
 	// 创建 zip writer
 	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
+	// defer zipWriter.Close()
 
 	// 将文件添加到 zip 文件
 	for _, fileInfo := range filesInfo {
@@ -1036,6 +1048,7 @@ func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 			err = addDirToZip(zipWriter, fileFullPath, "")
 		} else {
 			// 如果是文件，直接添加
+			global.Log.Infof("是文件类型\n") /////////////////////////////
 			err = addFileToZip(zipWriter, fileFullPath, "")
 		}
 		if err != nil {
@@ -1047,50 +1060,102 @@ func multipleFilesDownload(c *gin.Context, path string, filesInfo []fileInfo) {
 			return
 		}
 	}
-
-	// 设置响应头，告诉浏览器是文件下载
+	zipWriter.Close()
+	zipFile.Close()
+	zip_file, _ := os.Open(zipFileName)
+	fileInfo, _ := zip_file.Stat()
+	zipSize := fileInfo.Size()
+	global.Log.Infof("zipFileSize: %v\n", zipSize) /////////////////////////////
 	c.Writer.Header().Set("Content-Disposition", "attachment; filename=download.zip")
-	
-	c.Writer.Header().Set("Content-Length", string(func () fs.FileInfo {
-		fileInfo, _ := zipFile.Stat()
-		return fileInfo
-	}().Size()))
+	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", zipSize))
 	c.Writer.Header().Set("Content-Type", "application/octet-stream")
 
 	// 流式传输文件
-	if _, err := io.Copy(c.Writer, zipFile); err != nil {
+	if _, err := io.Copy(c.Writer, zip_file); err != nil {
 		global.Log.Errorf("Failed to copy file to response: %v", err)
 	}
+	zip_file.Close()
+	os.RemoveAll(tempDir)
+	
+}
+func GenerateHMACSHA256(data, secret string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(data))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
+func DownloadFileGetSignature(c *gin.Context) {
+
+	// expiration := time.Now().Add(10 * time.Minute).Unix()
+	// newUUID := uuid.New().String()
+	// // 生成签名
+	// signature := GenerateHMACSHA256(dataToSign, newUUID)
+
+}
+
+var expiration int64 = 0
+var newUUID string = ""
+var token string = ""
+
 func DownloadFile(c *gin.Context) {
+	global.Log.Infof("进入DownloadFile服务\n")
+	isGetSignature := c.Query("getSinature")
+	if isGetSignature == "true" {
+		newUUID = uuid.New().String()
+		token = c.Query("token")
+		expiration = time.Now().Add(10 * time.Minute).Unix()
+		global.Log.Infof("expiration: %d\n", expiration)
+
+		// 生成签名
+		signature := GenerateHMACSHA256(token, newUUID)
+		c.JSON(200, gin.H{
+			"code":      200,
+			"signature": signature,
+		})
+		return
+	}
 	// global.Log.Infof("-------------------------DownloadFile\n")
 	// global.Log.Infof("c.Request.Body: %v\n", c.Request.Body)
 	// 获取 path 参数
-    path := c.Query("path")
-    // 获取 filesInfo 参数（JSON 字符串）
-    filesInfoStr := c.Query("filesInfo")
+	path := c.Query("path")
+	// 获取 filesInfo 参数（JSON 字符串）
+	filesInfoStr := c.Query("filesInfo")
+	// 获取 token 参数
+	signature := c.Query("signature")
+	// 验证 token
+	expectedSignature := GenerateHMACSHA256(token, newUUID)
+	nowTime := time.Now().Unix()
+	if signature != expectedSignature || nowTime > expiration {
+		global.Log.Errorf("signature:%s,expectedSignature:%s\n", signature, expectedSignature)
+		global.Log.Errorf("expiration:%d,nowTime:%d\n", expiration, nowTime)
+		c.JSON(401, gin.H{
+			"code": 401,
+			"msg":  "无权限下载文件",
+		})
+		return
+	}
 
 	// 定义存储解析后数据的切片
-    var filesInfo []fileInfo
+	var filesInfo []fileInfo
 
-    // 解析 JSON 字符串为 FileInfo 结构体
-    if err := json.Unmarshal([]byte(filesInfoStr), &filesInfo); err != nil {
-        c.JSON(400, gin.H{
+	// 解析 JSON 字符串为 FileInfo 结构体
+	if err := json.Unmarshal([]byte(filesInfoStr), &filesInfo); err != nil {
+		c.JSON(400, gin.H{
 			"code": 400,
 			"msg":  "欲下载文件信息后端解析失败",
 		})
-        return
-    }
+		return
+	}
 	global.Log.Infof("path: %s, filesInfo: %s\n", path, filesInfoStr)
 	// var downloadFileInfo downloadFileInfo
-	
+
 	global.Log.Debugf("下载[%s]文件,文件为[%v]\n", path, filesInfo)
 	if len(filesInfo) == 1 && !filesInfo[0].IsDir {
 		// 单个文件，直接传输
 		singleFileDownload(c, path, filesInfo[0].Name)
 	} else if len(filesInfo) > 1 || (len(filesInfo) == 1 && filesInfo[0].IsDir) {
 		// 多个文件，打包成 zip 压缩包
+		global.Log.Infof("多个文件\n")
 		multipleFilesDownload(c, path, filesInfo)
 
 	} else {
