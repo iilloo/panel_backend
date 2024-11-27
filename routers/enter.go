@@ -43,6 +43,8 @@ func Routers() *gin.Engine{
 	CheckToken(router)
 	//用户管理相关路由
 	UserManageRouter(router)
+	//定时任务相关路由
+	TimingTaskRouter(router)
 
 
 	return router

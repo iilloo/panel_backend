@@ -15,9 +15,11 @@ import (
 	_ "github.com/golang-jwt/jwt/v5"
 
 	_ "github.com/sirupsen/logrus"
+	_"panel_backend/models"
 )
 
 func main() {
+	
 	// 初始化自定义日志
 	global.Log = core.InitLogger("Log_panel/", "panel")
 	// 初始化配置项
@@ -35,7 +37,12 @@ func main() {
 		return
 	}
 	// global.CMD = exec.Command("bash")
-
+	// // 自动迁移创建表
+	
+	// err := global.DB.AutoMigrate(&models.TimingTask{})
+	// if err != nil {
+	// 	panic("Failed to migrate TimingTask table: " + err.Error())
+	// }
 
 	// 初始化路由
 	router := routers.Routers()
