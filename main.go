@@ -36,6 +36,8 @@ func main() {
 		global.Log.Errorf("bash初始化失败")
 		return
 	}
+	// 初始化定时任务
+	core.InitTimingTask()
 	// global.CMD = exec.Command("bash")
 	// // 自动迁移创建表
 	
